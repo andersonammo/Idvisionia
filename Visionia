@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <title>Ammo 360 - Scan Facial Profissional</title>
+    <script defer src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; display: flex; flex-direction: column; align-items: center; background: #f4f4f4; }
+        canvas { position: absolute; }
+        .container { position: relative; width: 640px; height: 480px; }
+        #results { margin-top: 20px; padding: 15px; background: white; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); width: 600px; }
+        .panel { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    </style>
+</head>
+<body>
+
+    <h2>Scan Facial e Medidas Ópticas</h2>
+    
+    <div class="container">
+        <video id="video" width="640" height="480" autoplay muted></video>
+    </div>
+
+    <div id="results">
+        <h3>Relatório Técnico</h3>
+        <div class="panel" id="data-panel">
+            <div><strong>Formato do Rosto:</strong> <span id="face-shape">-</span></div>
+            <div><strong>DP Sugerida:</strong> <span id="val-dp">-</span> mm</div>
+            <div><strong>DNP (OD/OE):</strong> <span id="val-dnp">-</span> mm</div>
+            <div><strong>Ângulo Pantoscópico:</strong> <span id="val-panto">-</span>°</div>
+        </div>
+    </div>
+
+    <script>
+        const video = document.getElementById('video');
+        
+        // Iniciar Câmera
+        async function startVideo() {
+            navigator.getUserMedia(
+                { video: {} },
+                stream => video.srcObject = stream,
+                err => console.error(err)
+            )
+        }
+
+        // Carregar Modelos da Face-API
+        Promise.all([
+            faceapi.nets.tinyFaceDetector.loadFromUri('https://raw.githubusercontent.com/justadudewhohacks/face-api.js/master/weights'),
+            faceapi.nets.faceLandmark68Net.loadFromUri('https://raw.githubusercontent.com/justadudewhohacks/face-api.js/master/weights'),
+            faceapi.nets.faceRecognitionNet.loadFromUri('https://raw.githubusercontent.com/justadudewhohacks/face-api.js/master/weights')
+        ]).then(startVideo);
+
+        video.addEventListener('play', () => {
+            const canvas = faceapi.createCanvasFromMedia(video);
+            document.querySelector('.container').append(canvas);
+            const displaySize = { width: video.width, height: video.height };
+            faceapi.matchDimensions(canvas, displaySize);
+
+            setInterval(async () => {
+                const detections = await faceapi.detectAllFaces(video, new faceapi.TinyFaceDetectorOptions()).withFaceLandmarks();
+                const resizedDetections = faceapi.resizeResults(detections, displaySize);
+                
+                canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height);
+                faceapi.draw.drawFaceLandmarks(canvas, resizedDetections);
+
+                if (detections.length > 0) {
+                    processOpticalMetrics(detections[0].landmarks);
+                }
+            }, 100);
+        });
+
+        function processOpticalMetrics(landmarks) {
+            const leftEye = landmarks.getLeftEye();
+            const rightEye = landmarks.getRightEye();
+            const jaw = landmarks.getJawOutline();
+
+            // Lógica Simplificada de Cálculo (Exemplo em Pixels - precisa de fator de conversão mm)
+            // Distância entre pupilas (DP) em pixels
+            const pupilarDistPx = Math.hypot(rightEye[0].x - leftEye[3].x, rightEye[0].y - leftEye[3].y);
+            
+            // Lógica de Formato de Rosto (Relação Largura Testas vs Mandíbula)
+            const faceWidth = Math.abs(jaw[0].x - jaw[16].x);
+            const faceHeight = Math.abs(jaw[8].y - landmarks.getNose()[0].y);
+            
+            document.getElementById('val-dp').innerText = (pupilarDistPx * 0.26).toFixed(2); // 0.26 é um fator fictício
+            analisarFormatoRosto(faceWidth, faceHeight);
+        }
+
+        function analisarFormatoRosto(w, h) {
+            let shape = "Oval";
+            if (w / h > 1.2) shape = "Redondo";
+            if (h / w > 1.5) shape = "Retangular";
+            document.getElementById('face-shape').innerText = shape;
+        }
+    </script>
+</body>
+</html>
