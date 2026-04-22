@@ -3,348 +3,363 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ammo 360 Vision - Scanner Biométrico Pro</title>
-    
-    <script src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api/dist/face-api.min.js"></script>
-    
+    <title>Visio Ammo - Pupilômetro Digital</title>
     <style>
         :root {
             --primary: #00ff88;
             --secondary: #0088ff;
             --bg-dark: #121212;
             --panel-bg: #1e1e1e;
-            --text-light: #f0f0f0;
             --border: #333;
-            --guide-color: #ff0055;
             --calib-color: #a200ff;
+            --danger: #ff4444;
+            --text-light: #f0f0f0;
         }
 
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: var(--bg-dark); color: var(--text-light); margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; }
+        body { font-family: 'Segoe UI', Tahoma, sans-serif; background-color: var(--bg-dark); color: var(--text-light); margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; }
+        
         .header { width: 100%; max-width: 1200px; display: flex; justify-content: space-between; align-items: center; padding-bottom: 15px; border-bottom: 1px solid var(--border); margin-bottom: 20px; }
         .header h1 { margin: 0; font-size: 24px; color: var(--primary); text-transform: uppercase; letter-spacing: 1px; }
+        
         .main-container { display: flex; gap: 30px; width: 100%; max-width: 1200px; }
 
-        /* Câmera e Guias */
-        .camera-section { flex: 1; position: relative; background: #000; border-radius: 12px; overflow: hidden; border: 2px solid var(--border); min-height: 500px; display: flex; justify-content: center; align-items: center; }
-        video, canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; }
-        .overlay-guide { position: absolute; width: 250px; height: 350px; border: 2px dashed rgba(0, 255, 136, 0.5); border-radius: 50%; pointer-events: none; z-index: 10; }
+        .image-section { 
+            flex: 1; position: relative; background: #000; border-radius: 12px; overflow: hidden; 
+            border: 2px solid var(--border); min-height: 500px; display: flex; justify-content: center; align-items: center; 
+        }
         
-        .frame-bottom-guide { position: absolute; bottom: 35%; left: 10%; width: 80%; height: 2px; background-color: var(--guide-color); box-shadow: 0 0 10px var(--guide-color); z-index: 20; pointer-events: none; display: flex; justify-content: center; }
-        .frame-bottom-guide::after { content: 'Alinhe com a base da armação'; color: var(--guide-color); position: absolute; top: -25px; font-size: 14px; font-weight: bold; background: rgba(0,0,0,0.8); padding: 2px 8px; border-radius: 4px; }
-        
-        /* Status */
-        .status-badge { position: absolute; top: 20px; left: 20px; background: rgba(0,0,0,0.8); padding: 8px 15px; border-radius: 20px; font-size: 14px; z-index: 10; display: flex; align-items: center; gap: 10px; }
-        .indicator { width: 10px; height: 10px; border-radius: 50%; background: red; }
-        .mode-badge { position: absolute; top: 20px; right: 20px; background: var(--secondary); color: white; padding: 8px 15px; border-radius: 20px; font-size: 14px; font-weight: bold; z-index: 10; }
+        .canvas-wrapper { position: relative; display: none; }
+        #uploaded-image { max-width: 100%; max-height: 700px; display: block; }
+        #overlay-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; cursor: crosshair; }
 
-        /* Painel */
+        #instruction-banner {
+            position: absolute; top: 20px; left: 50%; transform: translateX(-50%);
+            background: rgba(0,0,0,0.85); padding: 10px 20px; border-radius: 8px; font-weight: bold;
+            color: #fff; font-size: 16px; border: 1px solid var(--primary); display: none; z-index: 20; text-align: center;
+        }
+
+        .upload-placeholder { color: #555; text-align: center; font-size: 18px; pointer-events: none; }
+
         .control-panel { width: 420px; display: flex; flex-direction: column; gap: 15px; }
         .card { background: var(--panel-bg); padding: 20px; border-radius: 12px; border: 1px solid var(--border); }
         .card h3 { margin-top: 0; font-size: 16px; color: #aaa; border-bottom: 1px solid var(--border); padding-bottom: 10px; }
-        .input-group { display: flex; flex-direction: column; gap: 10px; }
-        select, input { padding: 12px; background: var(--bg-dark); border: 1px solid var(--border); color: white; border-radius: 6px; font-size: 14px; }
         
-        /* Medidas */
         .metrics-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
         .metric-box { background: var(--bg-dark); padding: 12px; border-radius: 8px; text-align: center; border: 1px solid var(--border); }
         .metric-value { font-size: 20px; font-weight: bold; color: var(--primary); margin-top: 5px; }
         .metric-label { font-size: 12px; color: #888; text-transform: uppercase; }
-        .value-locked { color: #ffd700 !important; }
 
-        /* Botões */
-        .btn-group { display: flex; gap: 5px; }
-        .btn { flex: 1; border: none; padding: 10px; font-size: 12px; font-weight: bold; border-radius: 6px; cursor: pointer; transition: 0.2s; text-transform: uppercase; text-align: center; }
-        .btn-frontal { background: var(--secondary); color: white; }
-        .btn-perfil { background: #ffaa00; color: black; }
+        .btn-upload-file { display: none; }
+        .btn { border: none; padding: 12px; font-size: 13px; font-weight: bold; border-radius: 6px; cursor: pointer; transition: 0.2s; text-transform: uppercase; width: 100%; margin-bottom: 8px; }
+        .btn-upload { background: #444; color: white; border: 1px solid #666; }
         .btn-calibrar { background: var(--calib-color); color: white; }
-        .btn-capture { background: var(--primary); color: black; padding: 15px; font-size: 16px; width: 100%; margin-top: 10px; }
-        .btn:hover { filter: brightness(1.1); transform: translateY(-2px); }
+        .btn-dnp { background: var(--secondary); color: white; }
+        .btn-altura { background: #e67e22; color: white; }
+        .btn-capture { background: var(--primary); color: black; font-size: 16px; margin-top: 5px; padding: 15px;}
+        .btn-reset { background: transparent; color: var(--danger); border: 1px solid var(--danger); }
+        .btn:hover { filter: brightness(1.2); }
+        .btn:disabled { opacity: 0.3; cursor: not-allowed; filter: none; }
+        
+        .active-mode { box-shadow: 0 0 15px currentColor; border: 2px solid white; }
+        
+        .calib-highlight { border-left: 3px solid var(--calib-color); padding-left: 10px; margin-bottom: 15px; background: rgba(162, 0, 255, 0.1); padding: 10px; border-radius: 6px; }
+        .calib-highlight input { width: calc(100% - 20px); padding: 10px; background: #000; border: 1px solid var(--border); color: white; font-size: 16px; text-align: center; font-weight: bold; }
     </style>
 </head>
 <body>
 
     <div class="header">
-        <h1>Ammo 360 Vision</h1>
-        <div>Consultório Olharys & Óticas Ammo</div>
+        <h1>Ammo Vision <span style="font-size: 14px; color: #aaa;">| Pupilômetro Pro</span></h1>
+        <div style="font-weight: bold; color: #aaa;">Óticas Ammo</div>
     </div>
 
     <div class="main-container">
         
-        <div class="camera-section" id="camera-container">
-            <div class="status-badge"><div class="indicator" id="status-indicator"></div><span id="status-text">Aguardando Inicialização...</span></div>
-            <div class="mode-badge" id="modo-atual">PASSO 1: VISÃO FRONTAL</div>
-            
-            <video id="video" autoplay muted playsinline></video>
-            <div class="overlay-guide"></div>
-            <div class="frame-bottom-guide" id="linha-base"></div>
+        <div class="image-section" id="image-container">
+            <div id="instruction-banner">Selecione uma ferramenta no painel</div>
+            <div class="upload-placeholder" id="placeholder-text">
+                Nenhuma foto carregada.<br><br>Faça o upload da imagem frontal do cliente usando a armação.
+            </div>
+
+            <div class="canvas-wrapper" id="canvas-wrapper">
+                <img id="uploaded-image" alt="Foto do Cliente">
+                <canvas id="overlay-canvas"></canvas>
+            </div>
         </div>
 
         <div class="control-panel">
             <div class="card">
-                <h3>Atendimento</h3>
-                <div class="input-group">
-                    <input type="text" id="cliente" placeholder="Nome do Cliente" required>
-                    <select id="filial">
-                        <option value="">Selecione a Filial...</option>
-                        <option value="Umuarama">Matriz - Umuarama</option>
-                        <option value="Toledo">Toledo</option>
-                        <option value="Palotina">Palotina</option>
-                        <option value="Altonia">Altônia</option>
-                        <option value="Douradina">Douradina</option>
-                        <option value="Perobal">Perobal</option>
-                    </select>
-                    <select id="consultora">
-                        <option value="">Consultor(a)...</option>
-                        <option value="Graciele">Graciele</option>
-                        <option value="Patricia">Patrícia</option>
-                        <option value="Adriana">Adriana</option>
-                        <option value="Bianca">Bianca</option>
-                    </select>
+                <h3>Ferramentas de Medição</h3>
+                <input type="file" id="file-input" class="btn-upload-file" accept=".jpg, .jpeg, .png, .webp, image/*">
+                <button class="btn btn-upload" onclick="document.getElementById('file-input').click()">📁 1. Carregar Foto Frontal</button>
+                
+                <div class="calib-highlight">
+                    <label style="font-size: 11px; color: #ccc; display: block; margin-bottom: 5px; text-transform: uppercase;">Aro da Armação (Largura de uma lente)</label>
+                    <input type="number" id="tamanho-aro" placeholder="Ex: 54 (mm)">
                 </div>
+
+                <button class="btn btn-calibrar" id="btn-calibrar" onclick="ativarModo('CALIBRAR')" disabled>📐 2. Calibrar pelo Aro (2 Cliques)</button>
+                <button class="btn btn-dnp" id="btn-dnp" onclick="ativarModo('DNP')" disabled>👁️ 3. Medir DP / DNP (3 Cliques)</button>
+                <button class="btn btn-altura" id="btn-altura" onclick="ativarModo('ALTURA')" disabled>↕️ 4. Medir Altura (2 Cliques)</button>
+                
+                <button class="btn btn-reset" onclick="limparTudo()" style="margin-top: 10px;">🗑️ Cancelar / Limpar Imagem</button>
             </div>
 
             <div class="card">
                 <h3>Escâner Biométrico</h3>
                 <div class="metrics-grid">
                     <div class="metric-box"><div class="metric-label">DP Total</div><div class="metric-value" id="val-dp">0.0<small>mm</small></div></div>
-                    <div class="metric-box"><div class="metric-label">DNP OD | OE</div><div class="metric-value" style="font-size: 16px;" id="val-dnp">0.0 | 0.0</div></div>
+                    <div class="metric-box"><div class="metric-label">DNP (OD | OE)</div><div class="metric-value" style="font-size: 16px;" id="val-dnp">0.0 | 0.0</div></div>
                     <div class="metric-box"><div class="metric-label">Altura Pupila</div><div class="metric-value" id="val-altura">0.0<small>mm</small></div></div>
-                    <div class="metric-box"><div class="metric-label">Pantoscópico</div><div class="metric-value" id="val-panto">0.0°</div></div>
-                </div>
-                
-                <div style="margin-top: 15px; font-size: 13px; background: #222; padding: 10px; border-radius: 6px;">
-                    <div style="display:flex; justify-content: space-between; margin-bottom: 5px;">
-                        <span style="color:#aaa">Formato:</span><strong id="val-formato" style="color:var(--primary)">Avaliando...</strong>
-                    </div>
-                    <div style="display:flex; justify-content: space-between;">
-                        <span style="color:#aaa">Fator de Calibração:</span><strong id="val-escala" style="color:var(--calib-color)">Padrão (Média)</strong>
-                    </div>
+                    <div class="metric-box"><div class="metric-label">Escala Ativa</div><div class="metric-value" style="font-size: 14px; color: var(--calib-color);" id="val-escala">Pendente</div></div>
                 </div>
             </div>
 
-            <div class="btn-group">
-                <button class="btn btn-frontal" onclick="travarFrontal()">1. Frontal</button>
-                <button class="btn btn-perfil" onclick="iniciarPerfil()">2. Perfil</button>
-                <button class="btn btn-calibrar" onclick="calibrarEscala()">3. Calibrar</button>
-            </div>
-            <button class="btn btn-capture" onclick="gravarAtendimento()">Finalizar Atendimento</button>
+            <button class="btn btn-capture" onclick="gravarAtendimento()">✅ Finalizar e Gravar</button>
         </div>
     </div>
 
-  <script>
-    const video = document.getElementById('video');
-    const container = document.getElementById('camera-container');
-    
-    // Variáveis globais do sistema
-    let PIXEL_TO_MM = 0.264583; // Fator inicial padrão
-    let estadoApp = "FRONTAL"; // Estados: FRONTAL, FRONTAL_TRAVADO, PERFIL
-    let medidas = { dp: 0, dnp_od: 0, dnp_oe: 0, altura: 0, formato: '', panto: 0 };
-    let canvasMaster; // Canvas para desenho das linhas
-
-    // Variáveis para calibração por clique
-    let pontosCalibracao = [];
-    let calibrando = false;
-    let telaCongelada = false;
-
-    // 1. Inicialização e Carregamento de Modelos
-    async function loadModels() {
-        const txt = document.getElementById('status-text');
-        const ind = document.getElementById('status-indicator');
+    <script>
+        const imageElement = document.getElementById('uploaded-image');
+        const canvas = document.getElementById('overlay-canvas');
+        const ctx = canvas.getContext('2d');
+        const fileInput = document.getElementById('file-input');
+        const instructionBanner = document.getElementById('instruction-banner');
         
-        txt.innerText = "Baixando IA Ótica...";
-        const MODEL_URL = 'https://vladmandic.github.io/face-api/model/';
+        let PIXEL_TO_MM = 0; 
+        let modoAtual = null; 
+        let cliquesAtuais = [];
+        let currentImageUrl = null; 
         
-        try {
-            await Promise.all([
-                faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
-                faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL)
-            ]);
-            txt.innerText = "IA Pronta. Ligando Câmera...";
-            startVideo();
-        } catch (erro) {
-            console.error("Erro Crítico no Carregamento:", erro);
-            txt.innerText = "Erro ao baixar IA.";
-            ind.style.background = "red";
+        let pontosMemoria = { calibracao: [], dnp: [], altura: [] };
+
+        fileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            limparTudoVars(); 
+
+            if (currentImageUrl) URL.revokeObjectURL(currentImageUrl);
+            document.getElementById('placeholder-text').style.display = 'none';
+
+            currentImageUrl = URL.createObjectURL(file);
+            imageElement.src = currentImageUrl;
+            document.getElementById('canvas-wrapper').style.display = 'inline-block';
+
+            imageElement.onload = () => {
+                canvas.width = imageElement.clientWidth;
+                canvas.height = imageElement.clientHeight;
+                ctx.clearRect(0, 0, canvas.width, canvas.height); 
+                
+                document.getElementById('btn-calibrar').disabled = false;
+                document.getElementById('btn-dnp').disabled = false;
+                document.getElementById('btn-altura').disabled = false;
+            };
+            e.target.value = '';
+        });
+
+        function ativarModo(modo) {
+            modoAtual = modo;
+            cliquesAtuais = [];
+            
+            document.getElementById('btn-calibrar').classList.remove('active-mode');
+            document.getElementById('btn-dnp').classList.remove('active-mode');
+            document.getElementById('btn-altura').classList.remove('active-mode');
+            instructionBanner.style.display = 'block';
+
+            if (modo === 'CALIBRAR') {
+                const aroMM = document.getElementById('tamanho-aro').value;
+                if(!aroMM || isNaN(aroMM) || aroMM <= 0) {
+                    alert("⚠️ Digite o tamanho do ARO (largura da lente) da armação no painel antes de calibrar.");
+                    instructionBanner.style.display = 'none';
+                    return modoAtual = null;
+                }
+
+                pontosMemoria.calibracao = []; 
+                document.getElementById('btn-calibrar').classList.add('active-mode');
+                atualizarInstrucao(`CALIBRAÇÃO: Clique na borda externa ESQUERDA de uma das lentes.`);
+            } 
+            else if (modo === 'DNP') {
+                if(PIXEL_TO_MM === 0) { alert("Faça a calibração do Aro primeiro!"); return ativarModo(null); }
+                pontosMemoria.dnp = [];
+                document.getElementById('btn-dnp').classList.add('active-mode');
+                atualizarInstrucao("DNP: Clique no centro da PUPILA DIREITA.");
+            } 
+            else if (modo === 'ALTURA') {
+                if(PIXEL_TO_MM === 0) { alert("Faça a calibração do Aro primeiro!"); return ativarModo(null); }
+                pontosMemoria.altura = [];
+                document.getElementById('btn-altura').classList.add('active-mode');
+                atualizarInstrucao("ALTURA: Clique no centro da PUPILA.");
+            }
+            redesenharTudo();
         }
-    }
 
-    // 2. Acesso à Câmera
-    function startVideo() {
-        navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } })
-            .then(stream => { video.srcObject = stream; })
-            .catch(err => { 
-                console.error("Erro na Câmera:", err);
-                document.getElementById('status-indicator').style.background = "red"; 
-            });
-    }
+        function atualizarInstrucao(texto) { instructionBanner.innerText = texto; }
 
-    // 3. Processamento em Tempo Real e Eventos de Clique
-    video.addEventListener('play', () => {
-        canvasMaster = faceapi.createCanvasFromMedia(video);
-        canvasMaster.style.cursor = "crosshair"; // Mira para calibração
-        container.appendChild(canvasMaster);
-        const displaySize = { width: video.clientWidth, height: video.clientHeight };
-        faceapi.matchDimensions(canvasMaster, displaySize);
+        canvas.addEventListener('click', (e) => {
+            if (!modoAtual) return;
 
-        // --- SISTEMA DE CLIQUE NO CARTÃO (Ajustado) ---
-        canvasMaster.addEventListener('click', (e) => {
-            if (!calibrando) return; // Só age se o botão 'Calibrar' foi clicado
-
-            const rect = canvasMaster.getBoundingClientRect();
+            const rect = canvas.getBoundingClientRect();
             const x = e.clientX - rect.left;
             const y = e.clientY - rect.top;
 
-            pontosCalibracao.push({x, y});
+            cliquesAtuais.push({x, y});
 
-            // Feedback visual do ponto de clique (Vermelho)
-            const ctx = canvasMaster.getContext('2d');
-            ctx.fillStyle = "red";
-            ctx.beginPath();
-            ctx.arc(x, y, 4, 0, 2 * Math.PI);
-            ctx.fill();
-
-            // Lógica de dois cliques (Início e Fim do cartão)
-            if (pontosCalibracao.length === 2) {
-                const distPixels = Math.hypot(
-                    pontosCalibracao[1].x - pontosCalibracao[0].x, 
-                    pontosCalibracao[1].y - pontosCalibracao[0].y
-                );
-                
-                PIXEL_TO_MM = 85.6 / distPixels; // Fórmula para Fator de Precisão (Cartão 85.6mm)
-                
-                document.getElementById('val-escala').innerText = `Exata (${PIXEL_TO_MM.toFixed(3)})`;
-                alert("✅ Sistema Calibrado!\nA escala milimétrica foi ajustada perfeitamente.");
-                
-                // Retoma o vídeo e o reconhecimento
-                calibrando = false;
-                telaCongelada = false;
-                video.play();
-                pontosCalibracao = [];
+            if (modoAtual === 'CALIBRAR') {
+                pontosMemoria.calibracao = [...cliquesAtuais];
+                if (cliquesAtuais.length === 1) atualizarInstrucao("CALIBRAÇÃO: Agora clique na borda externa DIREITA da mesma lente.");
+                if (cliquesAtuais.length === 2) finalizarCalibracao();
+            } 
+            else if (modoAtual === 'DNP') {
+                pontosMemoria.dnp = [...cliquesAtuais];
+                if (cliquesAtuais.length === 1) atualizarInstrucao("DNP: Clique no centro da PUPILA ESQUERDA.");
+                if (cliquesAtuais.length === 2) atualizarInstrucao("DNP: Clique no centro da PONTE DO NARIZ.");
+                if (cliquesAtuais.length === 3) finalizarDNP();
+            } 
+            else if (modoAtual === 'ALTURA') {
+                pontosMemoria.altura = [...cliquesAtuais];
+                if (cliquesAtuais.length === 1) atualizarInstrucao("ALTURA: Clique na BASE INFERIOR DA ARMAÇÃO (linha abaixo da mesma pupila).");
+                if (cliquesAtuais.length === 2) finalizarAltura();
             }
+            redesenharTudo();
         });
 
-        // Loop de Detecção Facial
-        setInterval(async () => {
-            if(estadoApp === "FRONTAL_TRAVADO" || telaCongelada) return;
-
-            const detections = await faceapi.detectAllFaces(video, new faceapi.TinyFaceDetectorOptions()).withFaceLandmarks();
-            const resizedDetections = faceapi.resizeResults(detections, displaySize);
+        function finalizarCalibracao() {
+            const p1 = cliquesAtuais[0];
+            const p2 = cliquesAtuais[1];
+            const distPixels = Math.hypot(p2.x - p1.x, p2.y - p1.y);
             
-            const ctx = canvasMaster.getContext('2d');
-            ctx.clearRect(0, 0, canvasMaster.width, canvasMaster.height);
-            faceapi.draw.drawFaceLandmarks(canvasMaster, resizedDetections); // Desenha as linhas
-
-            if (detections.length > 0) {
-                document.getElementById('status-indicator').style.background = "var(--primary)";
-                document.getElementById('status-text').innerText = "Rosto Detectado";
-                if (estadoApp === "FRONTAL") processarFrontal(detections[0].landmarks);
-                else if (estadoApp === "PERFIL") processarPerfil(detections[0].landmarks);
-            }
-        }, 150);
-    });
-
-    // 4. Motores de Cálculo Ótico (DP, DNP, Altura, Perfil)
-    function processarFrontal(landmarks) {
-        const leftEye = landmarks.getLeftEye();
-        const rightEye = landmarks.getRightEye();
-        const noseBridge = landmarks.getNose()[0];
-        
-        const getCenter = (pts) => ({
-            x: pts.reduce((sum, p) => sum + p.x, 0) / pts.length,
-            y: pts.reduce((sum, p) => sum + p.y, 0) / pts.length
-        });
-
-        const cLeft = getCenter(leftEye);
-        const cRight = getCenter(rightEye);
-
-        medidas.dp = (Math.hypot(cRight.x - cLeft.x, cRight.y - cLeft.y) * PIXEL_TO_MM).toFixed(1);
-        medidas.dnp_od = (Math.hypot(cRight.x - noseBridge.x, cRight.y - noseBridge.y) * PIXEL_TO_MM).toFixed(1);
-        medidas.dnp_oe = (Math.hypot(cLeft.x - noseBridge.x, cLeft.y - noseBridge.y) * PIXEL_TO_MM).toFixed(1);
-
-        const videoRect = video.getBoundingClientRect();
-        const baseArmacaoY = videoRect.height - (videoRect.height * 0.35); 
-        const pupilaYMedia = (cLeft.y + cRight.y) / 2;
-        medidas.altura = ((baseArmacaoY - pupilaYMedia) * PIXEL_TO_MM).toFixed(1);
-
-        atualizarPainel();
-    }
-
-    function processarPerfil(landmarks) {
-        const jaw = landmarks.getJawOutline();
-        const rightEye = landmarks.getRightEye()[3]; // Canto do olho
-        const orelha = jaw[0]; // Ponto tragus (orelha)
-
-        const deltaY = rightEye.y - orelha.y;
-        const deltaX = rightEye.x - orelha.x;
-        let angulo = Math.abs(Math.atan2(deltaY, deltaX) * (180 / Math.PI));
-        
-        if(angulo > 20) angulo = angulo / 2; // Normalização ótica simplificada
-
-        medidas.panto = angulo.toFixed(1);
-        document.getElementById('val-panto').innerText = `${medidas.panto}°`;
-    }
-
-    function atualizarPainel() {
-        document.getElementById('val-dp').innerHTML = `${medidas.dp}<small>mm</small>`;
-        document.getElementById('val-dnp').innerText = `${medidas.dnp_od} | ${medidas.dnp_oe}`;
-        document.getElementById('val-altura').innerHTML = `${Math.max(0, medidas.altura)}<small>mm</small>`;
-    }
-
-    // 5. Funções de Controle de Fluxo da Loja
-    function calibrarEscala() {
-        alert("MODO DE CALIBRAÇÃO (Sem Linhas):\n\n1. O vídeo vai congelar.\n2. Use o mouse/dedo e clique na borda ESQUERDA do cartão.\n3. Em seguida, clique na borda DIREITA.");
-        
-        telaCongelada = true;
-        calibrando = true;
-        video.pause(); // Congela o vídeo
-        pontosCalibracao = [];
-        
-        // --- NOVO: Limpa o canvas imediatamente para esconder as linhas ---
-        const ctx = canvasMaster.getContext('2d');
-        ctx.clearRect(0, 0, canvasMaster.width, canvasMaster.height);
-    }
-
-    function travarFrontal() {
-        estadoApp = "FRONTAL_TRAVADO";
-        document.getElementById('val-dp').classList.add('value-locked');
-        document.getElementById('val-dnp').classList.add('value-locked');
-        document.getElementById('linha-base').style.display = 'none'; // Esconde a linha vermelha
-
-        // --- NOVO: Limpa as linhas faciais também ao travar as medidas ---
-        const ctx = canvasMaster.getContext('2d');
-        ctx.clearRect(0, 0, canvasMaster.width, canvasMaster.height);
-    }
-
-    function iniciarPerfil() {
-        if(estadoApp === "FRONTAL") return alert("Por favor, trave as medidas frontais antes de ir para o perfil.");
-        estadoApp = "PERFIL";
-        document.getElementById('modo-atual').innerText = "PASSO 2: VISÃO LATERAL";
-        document.getElementById('modo-atual').style.background = "#ffaa00";
-        alert("Peça para o cliente virar o rosto levemente de lado.");
-    }
-
-    function gravarAtendimento() {
-        const cliente = document.getElementById('cliente').value;
-        const filial = document.getElementById('filial').value;
-        if(!cliente || !filial) return alert("Preencha o Nome e a Filial!");
-        
-        document.getElementById('val-panto').classList.add('value-locked');
-        
-        alert(`DADOS PRONTOS (Ammo 360 - ${filial})\nCliente: ${cliente}\nDP: ${medidas.dp}mm\nAlt: ${medidas.altura}mm\nPanto: ${medidas.panto}°`);
-        
-        // Recarrega para o próximo cliente após 2 segundos
-        setTimeout(() => location.reload(), 2000); 
-    }
-
-    // 6. Inicialização Segura
-    window.onload = function() {
-        if (typeof faceapi !== 'undefined') {
-            loadModels();
-        } else {
-            document.getElementById('status-text').innerText = "Erro: Biblioteca não carregada.";
-            document.getElementById('status-indicator').style.background = "red";
+            const aroMM = parseFloat(document.getElementById('tamanho-aro').value);
+            
+            PIXEL_TO_MM = aroMM / distPixels; 
+            document.getElementById('val-escala').innerText = `Aro OK (${PIXEL_TO_MM.toFixed(3)})`;
+            
+            encerrarModo("Calibração exata baseada na lente concluída.");
+            if(pontosMemoria.dnp.length === 3) finalizarDNP(false);
+            if(pontosMemoria.altura.length === 2) finalizarAltura(false);
         }
-    };
-</script>
+
+        function finalizarDNP(mostrarAlerta = true) {
+            const pupilaDir = pontosMemoria.dnp[0];
+            const pupilaEsq = pontosMemoria.dnp[1];
+            const nariz = pontosMemoria.dnp[2];
+
+            const dpPx = Math.hypot(pupilaEsq.x - pupilaDir.x, pupilaEsq.y - pupilaDir.y);
+            const dnpOdPx = Math.hypot(nariz.x - pupilaDir.x, nariz.y - pupilaDir.y);
+            const dnpOePx = Math.hypot(pupilaEsq.x - nariz.x, pupilaEsq.y - nariz.y);
+
+            document.getElementById('val-dp').innerHTML = `${(dpPx * PIXEL_TO_MM).toFixed(1)}<small>mm</small>`;
+            document.getElementById('val-dnp').innerText = `${(dnpOdPx * PIXEL_TO_MM).toFixed(1)} | ${(dnpOePx * PIXEL_TO_MM).toFixed(1)}`;
+            if(mostrarAlerta) encerrarModo();
+        }
+
+        function finalizarAltura(mostrarAlerta = true) {
+            const pupila = pontosMemoria.altura[0];
+            const base = pontosMemoria.altura[1];
+
+            const alturaPx = Math.abs(base.y - pupila.y);
+            document.getElementById('val-altura').innerHTML = `${(alturaPx * PIXEL_TO_MM).toFixed(1)}<small>mm</small>`;
+            if(mostrarAlerta) encerrarModo();
+        }
+
+        function encerrarModo() {
+            document.getElementById('btn-' + modoAtual.toLowerCase()).classList.remove('active-mode');
+            modoAtual = null;
+            cliquesAtuais = [];
+            instructionBanner.style.display = 'none';
+        }
+
+        function redesenharTudo() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            if (pontosMemoria.calibracao.length > 0) {
+                desenharPonto(pontosMemoria.calibracao[0], '#a200ff');
+                if (pontosMemoria.calibracao[1]) {
+                    desenharPonto(pontosMemoria.calibracao[1], '#a200ff');
+                    desenharLinha(pontosMemoria.calibracao[0], pontosMemoria.calibracao[1], '#a200ff');
+                }
+            }
+            if (pontosMemoria.dnp.length > 0) {
+                desenharPonto(pontosMemoria.dnp[0], '#00ff88'); 
+                if (pontosMemoria.dnp[1]) {
+                    desenharPonto(pontosMemoria.dnp[1], '#00ff88'); 
+                    desenharLinha(pontosMemoria.dnp[0], pontosMemoria.dnp[1], 'rgba(0,255,136,0.3)'); 
+                }
+                if (pontosMemoria.dnp[2]) {
+                    desenharPonto(pontosMemoria.dnp[2], '#00ff88', true); 
+                    desenharLinha(pontosMemoria.dnp[0], pontosMemoria.dnp[2], '#00ff88'); 
+                    desenharLinha(pontosMemoria.dnp[1], pontosMemoria.dnp[2], '#00ff88'); 
+                }
+            }
+            if (pontosMemoria.altura.length > 0) {
+                desenharPonto(pontosMemoria.altura[0], '#e67e22'); 
+                if (pontosMemoria.altura[1]) {
+                    desenharPonto(pontosMemoria.altura[1], '#e67e22'); 
+                    desenharLinha(pontosMemoria.altura[0], pontosMemoria.altura[1], '#e67e22');
+                    
+                    ctx.beginPath();
+                    ctx.moveTo(pontosMemoria.altura[1].x - 30, pontosMemoria.altura[1].y);
+                    ctx.lineTo(pontosMemoria.altura[1].x + 30, pontosMemoria.altura[1].y);
+                    ctx.strokeStyle = '#e67e22';
+                    ctx.stroke();
+                }
+            }
+        }
+
+        function desenharPonto(p, cor, isNose = false) {
+            ctx.fillStyle = cor;
+            ctx.beginPath();
+            if(isNose) { ctx.rect(p.x - 4, p.y - 4, 8, 8); } 
+            else { ctx.arc(p.x, p.y, 5, 0, 2 * Math.PI); }
+            ctx.fill();
+        }
+
+        function desenharLinha(p1, p2, cor) {
+            ctx.beginPath();
+            ctx.moveTo(p1.x, p1.y);
+            ctx.lineTo(p2.x, p2.y);
+            ctx.strokeStyle = cor;
+            ctx.lineWidth = 2;
+            ctx.stroke();
+        }
+
+        function limparTudoVars() {
+            PIXEL_TO_MM = 0;
+            modoAtual = null;
+            cliquesAtuais = [];
+            pontosMemoria = { calibracao: [], dnp: [], altura: [] };
+            document.getElementById('val-dp').innerHTML = `0.0<small>mm</small>`;
+            document.getElementById('val-dnp').innerText = `0.0 | 0.0`;
+            document.getElementById('val-altura').innerHTML = `0.0<small>mm</small>`;
+            document.getElementById('val-escala').innerText = `Pendente`;
+        }
+
+        function limparTudo() {
+            limparTudoVars();
+            if (currentImageUrl) { URL.revokeObjectURL(currentImageUrl); currentImageUrl = null; }
+            
+            imageElement.src = "";
+            document.getElementById('canvas-wrapper').style.display = 'none'; 
+            fileInput.value = ""; 
+            document.getElementById('tamanho-aro').value = "";
+            if(ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            document.getElementById('placeholder-text').style.display = 'block';
+            instructionBanner.style.display = 'none';
+            
+            document.getElementById('btn-calibrar').disabled = true;
+            document.getElementById('btn-dnp').disabled = true;
+            document.getElementById('btn-altura').disabled = true;
+            document.getElementById('btn-calibrar').classList.remove('active-mode');
+            document.getElementById('btn-dnp').classList.remove('active-mode');
+            document.getElementById('btn-altura').classList.remove('active-mode');
+        }
+
+        function gravarAtendimento() {
+            if(PIXEL_TO_MM === 0) return alert("Você precisa fazer a medição antes de finalizar!");
+            alert("✅ MEDIDAS GRAVADAS COM SUCESSO!\nPronto para envio ao laboratório.");
+            limparTudo();
+        }
+    </script>
 </body>
 </html>
