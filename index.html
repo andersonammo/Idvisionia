@@ -131,19 +131,22 @@
         </div>
     </div>
 
-   <script>
+  <script>
     const video = document.getElementById('video');
     const container = document.getElementById('camera-container');
     
-    let PIXEL_TO_MM = 0.264583; 
-    let estadoApp = "FRONTAL"; 
+    // Variáveis globais do sistema
+    let PIXEL_TO_MM = 0.264583; // Fator inicial padrão
+    let estadoApp = "FRONTAL"; // Estados: FRONTAL, FRONTAL_TRAVADO, PERFIL
     let medidas = { dp: 0, dnp_od: 0, dnp_oe: 0, altura: 0, formato: '', panto: 0 };
+    let canvasMaster; // Canvas para desenho das linhas
 
-    // Variáveis para a nova calibração por clique
+    // Variáveis para calibração por clique
     let pontosCalibracao = [];
     let calibrando = false;
     let telaCongelada = false;
 
+    // 1. Inicialização e Carregamento de Modelos
     async function loadModels() {
         const txt = document.getElementById('status-text');
         const ind = document.getElementById('status-indicator');
@@ -159,58 +162,58 @@
             txt.innerText = "IA Pronta. Ligando Câmera...";
             startVideo();
         } catch (erro) {
-            console.error("Erro:", erro);
+            console.error("Erro Crítico no Carregamento:", erro);
             txt.innerText = "Erro ao baixar IA.";
             ind.style.background = "red";
         }
     }
 
+    // 2. Acesso à Câmera
     function startVideo() {
         navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } })
             .then(stream => { video.srcObject = stream; })
-            .catch(err => { document.getElementById('status-indicator').style.background = "red"; });
+            .catch(err => { 
+                console.error("Erro na Câmera:", err);
+                document.getElementById('status-indicator').style.background = "red"; 
+            });
     }
 
-    // O Canvas agora precisa estar acessível globalmente para registrarmos os cliques
-    let canvasMaster;
-
+    // 3. Processamento em Tempo Real e Eventos de Clique
     video.addEventListener('play', () => {
         canvasMaster = faceapi.createCanvasFromMedia(video);
-        canvasMaster.style.cursor = "crosshair"; // Muda o mouse para uma mira
+        canvasMaster.style.cursor = "crosshair"; // Mira para calibração
         container.appendChild(canvasMaster);
         const displaySize = { width: video.clientWidth, height: video.clientHeight };
         faceapi.matchDimensions(canvasMaster, displaySize);
 
-        // Evento de Clique para Calibração Visual
+        // --- SISTEMA DE CLIQUE NO CARTÃO (Ajustado) ---
         canvasMaster.addEventListener('click', (e) => {
-            if (!calibrando) return;
+            if (!calibrando) return; // Só age se o botão 'Calibrar' foi clicado
 
-            // Pega a posição do clique relativa ao canvas
             const rect = canvasMaster.getBoundingClientRect();
             const x = e.clientX - rect.left;
             const y = e.clientY - rect.top;
 
             pontosCalibracao.push({x, y});
 
-            // Desenha um ponto vermelho onde a consultora clicou
+            // Feedback visual do ponto de clique (Vermelho)
             const ctx = canvasMaster.getContext('2d');
             ctx.fillStyle = "red";
             ctx.beginPath();
             ctx.arc(x, y, 4, 0, 2 * Math.PI);
             ctx.fill();
 
+            // Lógica de dois cliques (Início e Fim do cartão)
             if (pontosCalibracao.length === 2) {
-                // Dois cliques feitos! Calcula a distância em pixels
                 const distPixels = Math.hypot(
                     pontosCalibracao[1].x - pontosCalibracao[0].x, 
                     pontosCalibracao[1].y - pontosCalibracao[0].y
                 );
                 
-                // Cartão padrão = 85.6mm
-                PIXEL_TO_MM = 85.6 / distPixels;
+                PIXEL_TO_MM = 85.6 / distPixels; // Fórmula para Fator de Precisão (Cartão 85.6mm)
                 
                 document.getElementById('val-escala').innerText = `Exata (${PIXEL_TO_MM.toFixed(3)})`;
-                alert("✅ Calibração de Precisão Concluída!\nA escala foi ajustada perfeitamente para a distância deste cliente.");
+                alert("✅ Sistema Calibrado!\nA escala milimétrica foi ajustada perfeitamente.");
                 
                 // Retoma o vídeo e o reconhecimento
                 calibrando = false;
@@ -220,6 +223,7 @@
             }
         });
 
+        // Loop de Detecção Facial
         setInterval(async () => {
             if(estadoApp === "FRONTAL_TRAVADO" || telaCongelada) return;
 
@@ -228,7 +232,7 @@
             
             const ctx = canvasMaster.getContext('2d');
             ctx.clearRect(0, 0, canvasMaster.width, canvasMaster.height);
-            faceapi.draw.drawFaceLandmarks(canvasMaster, resizedDetections);
+            faceapi.draw.drawFaceLandmarks(canvasMaster, resizedDetections); // Desenha as linhas
 
             if (detections.length > 0) {
                 document.getElementById('status-indicator').style.background = "var(--primary)";
@@ -239,6 +243,7 @@
         }, 150);
     });
 
+    // 4. Motores de Cálculo Ótico (DP, DNP, Altura, Perfil)
     function processarFrontal(landmarks) {
         const leftEye = landmarks.getLeftEye();
         const rightEye = landmarks.getRightEye();
@@ -252,7 +257,6 @@
         const cLeft = getCenter(leftEye);
         const cRight = getCenter(rightEye);
 
-        // Aplica o fator de calibração exato
         medidas.dp = (Math.hypot(cRight.x - cLeft.x, cRight.y - cLeft.y) * PIXEL_TO_MM).toFixed(1);
         medidas.dnp_od = (Math.hypot(cRight.x - noseBridge.x, cRight.y - noseBridge.y) * PIXEL_TO_MM).toFixed(1);
         medidas.dnp_oe = (Math.hypot(cLeft.x - noseBridge.x, cLeft.y - noseBridge.y) * PIXEL_TO_MM).toFixed(1);
@@ -267,14 +271,14 @@
 
     function processarPerfil(landmarks) {
         const jaw = landmarks.getJawOutline();
-        const rightEye = landmarks.getRightEye()[3];
-        const orelha = jaw[0]; 
+        const rightEye = landmarks.getRightEye()[3]; // Canto do olho
+        const orelha = jaw[0]; // Ponto tragus (orelha)
 
         const deltaY = rightEye.y - orelha.y;
         const deltaX = rightEye.x - orelha.x;
         let angulo = Math.abs(Math.atan2(deltaY, deltaX) * (180 / Math.PI));
         
-        if(angulo > 20) angulo = angulo / 2; 
+        if(angulo > 20) angulo = angulo / 2; // Normalização ótica simplificada
 
         medidas.panto = angulo.toFixed(1);
         document.getElementById('val-panto').innerText = `${medidas.panto}°`;
@@ -286,35 +290,60 @@
         document.getElementById('val-altura').innerHTML = `${Math.max(0, medidas.altura)}<small>mm</small>`;
     }
 
-    // --- NOVO SISTEMA DE CALIBRAÇÃO VISUAL ---
+    // 5. Funções de Controle de Fluxo da Loja
     function calibrarEscala() {
-        alert("MODO DE CALIBRAÇÃO:\n\n1. A imagem vai congelar.\n2. Clique exatamente na borda ESQUERDA do cartão do cliente.\n3. Em seguida, clique na borda DIREITA do cartão.");
+        alert("MODO DE CALIBRAÇÃO (Sem Linhas):\n\n1. O vídeo vai congelar.\n2. Use o mouse/dedo e clique na borda ESQUERDA do cartão.\n3. Em seguida, clique na borda DIREITA.");
         
         telaCongelada = true;
         calibrando = true;
-        video.pause(); // Congela o vídeo para a consultora conseguir clicar nas bordas com calma
+        video.pause(); // Congela o vídeo
         pontosCalibracao = [];
+        
+        // --- NOVO: Limpa o canvas imediatamente para esconder as linhas ---
+        const ctx = canvasMaster.getContext('2d');
+        ctx.clearRect(0, 0, canvasMaster.width, canvasMaster.height);
     }
 
     function travarFrontal() {
         estadoApp = "FRONTAL_TRAVADO";
         document.getElementById('val-dp').classList.add('value-locked');
         document.getElementById('val-dnp').classList.add('value-locked');
+        document.getElementById('linha-base').style.display = 'none'; // Esconde a linha vermelha
+
+        // --- NOVO: Limpa as linhas faciais também ao travar as medidas ---
+        const ctx = canvasMaster.getContext('2d');
+        ctx.clearRect(0, 0, canvasMaster.width, canvasMaster.height);
     }
 
     function iniciarPerfil() {
+        if(estadoApp === "FRONTAL") return alert("Por favor, trave as medidas frontais antes de ir para o perfil.");
         estadoApp = "PERFIL";
         document.getElementById('modo-atual').innerText = "PASSO 2: VISÃO LATERAL";
         document.getElementById('modo-atual').style.background = "#ffaa00";
+        alert("Peça para o cliente virar o rosto levemente de lado.");
     }
 
     function gravarAtendimento() {
-        alert("Medidas prontas para o laboratório.");
-        setTimeout(() => location.reload(), 1500); 
+        const cliente = document.getElementById('cliente').value;
+        const filial = document.getElementById('filial').value;
+        if(!cliente || !filial) return alert("Preencha o Nome e a Filial!");
+        
+        document.getElementById('val-panto').classList.add('value-locked');
+        
+        alert(`DADOS PRONTOS (Ammo 360 - ${filial})\nCliente: ${cliente}\nDP: ${medidas.dp}mm\nAlt: ${medidas.altura}mm\nPanto: ${medidas.panto}°`);
+        
+        // Recarrega para o próximo cliente após 2 segundos
+        setTimeout(() => location.reload(), 2000); 
     }
 
+    // 6. Inicialização Segura
     window.onload = function() {
-        if (typeof faceapi !== 'undefined') loadModels();
+        if (typeof faceapi !== 'undefined') {
+            loadModels();
+        } else {
+            document.getElementById('status-text').innerText = "Erro: Biblioteca não carregada.";
+            document.getElementById('status-indicator').style.background = "red";
+        }
     };
 </script>
 </body>
