@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ammo 360 Vision - Scanner Biométrico Completo</title>
+    <title>Ammo 360 Vision - Scanner Biométrico Pro</title>
     
     <script src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api/dist/face-api.min.js"></script>
     
@@ -16,6 +16,7 @@
             --text-light: #f0f0f0;
             --border: #333;
             --guide-color: #ff0055;
+            --calib-color: #a200ff;
         }
 
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: var(--bg-dark); color: var(--text-light); margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; }
@@ -27,10 +28,11 @@
         .camera-section { flex: 1; position: relative; background: #000; border-radius: 12px; overflow: hidden; border: 2px solid var(--border); min-height: 500px; display: flex; justify-content: center; align-items: center; }
         video, canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; }
         .overlay-guide { position: absolute; width: 250px; height: 350px; border: 2px dashed rgba(0, 255, 136, 0.5); border-radius: 50%; pointer-events: none; z-index: 10; }
+        
         .frame-bottom-guide { position: absolute; bottom: 35%; left: 10%; width: 80%; height: 2px; background-color: var(--guide-color); box-shadow: 0 0 10px var(--guide-color); z-index: 20; pointer-events: none; display: flex; justify-content: center; }
         .frame-bottom-guide::after { content: 'Alinhe com a base da armação'; color: var(--guide-color); position: absolute; top: -25px; font-size: 14px; font-weight: bold; background: rgba(0,0,0,0.8); padding: 2px 8px; border-radius: 4px; }
         
-        /* Badges de Status */
+        /* Status */
         .status-badge { position: absolute; top: 20px; left: 20px; background: rgba(0,0,0,0.8); padding: 8px 15px; border-radius: 20px; font-size: 14px; z-index: 10; display: flex; align-items: center; gap: 10px; }
         .indicator { width: 10px; height: 10px; border-radius: 50%; background: red; }
         .mode-badge { position: absolute; top: 20px; right: 20px; background: var(--secondary); color: white; padding: 8px 15px; border-radius: 20px; font-size: 14px; font-weight: bold; z-index: 10; }
@@ -50,10 +52,11 @@
         .value-locked { color: #ffd700 !important; }
 
         /* Botões */
-        .btn-group { display: flex; gap: 10px; }
-        .btn { flex: 1; border: none; padding: 12px; font-size: 14px; font-weight: bold; border-radius: 6px; cursor: pointer; transition: 0.2s; text-transform: uppercase; }
+        .btn-group { display: flex; gap: 5px; }
+        .btn { flex: 1; border: none; padding: 10px; font-size: 12px; font-weight: bold; border-radius: 6px; cursor: pointer; transition: 0.2s; text-transform: uppercase; text-align: center; }
         .btn-frontal { background: var(--secondary); color: white; }
         .btn-perfil { background: #ffaa00; color: black; }
+        .btn-calibrar { background: var(--calib-color); color: white; }
         .btn-capture { background: var(--primary); color: black; padding: 15px; font-size: 16px; width: 100%; margin-top: 10px; }
         .btn:hover { filter: brightness(1.1); transform: translateY(-2px); }
     </style>
@@ -114,14 +117,15 @@
                         <span style="color:#aaa">Formato:</span><strong id="val-formato" style="color:var(--primary)">Avaliando...</strong>
                     </div>
                     <div style="display:flex; justify-content: space-between;">
-                        <span style="color:#aaa">Sugestão:</span><strong id="val-armacao">Avaliando...</strong>
+                        <span style="color:#aaa">Fator de Calibração:</span><strong id="val-escala" style="color:var(--calib-color)">Padrão (Média)</strong>
                     </div>
                 </div>
             </div>
 
             <div class="btn-group">
-                <button class="btn btn-frontal" onclick="travarFrontal()">1. Travar Frontal</button>
-                <button class="btn btn-perfil" onclick="iniciarPerfil()">2. Ler Perfil</button>
+                <button class="btn btn-frontal" onclick="travarFrontal()">1. Frontal</button>
+                <button class="btn btn-perfil" onclick="iniciarPerfil()">2. Perfil</button>
+                <button class="btn btn-calibrar" onclick="calibrarEscala()">3. Calibrar</button>
             </div>
             <button class="btn btn-capture" onclick="gravarAtendimento()">Finalizar Atendimento</button>
         </div>
@@ -129,12 +133,13 @@
 
     <script>
         const video = document.getElementById('video');
-        const PIXEL_TO_MM = 0.264583; 
+        
+        // Agora o fator é uma variável (let) para poder ser alterada pelo botão de calibração
+        let PIXEL_TO_MM = 0.264583; 
         
         let estadoApp = "FRONTAL"; 
-        let medidas = { dp: 0, dnp_od: 0, dnp_oe: 0, altura: 0, formato: '', armacao: '', panto: 0 };
+        let medidas = { dp: 0, dnp_od: 0, dnp_oe: 0, altura: 0, formato: '', panto: 0 };
 
-        // 2. MODELOS ATUALIZADOS (Servidor Vladmandic)
         async function loadModels() {
             const txt = document.getElementById('status-text');
             const ind = document.getElementById('status-indicator');
@@ -151,7 +156,7 @@
                 startVideo();
             } catch (erro) {
                 console.error("Erro ao carregar IA:", erro);
-                txt.innerText = "Erro ao baixar IA. Tente recarregar a página.";
+                txt.innerText = "Erro ao baixar IA. Recarregue a página.";
                 ind.style.background = "red";
             }
         }
@@ -160,9 +165,8 @@
             navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } })
                 .then(stream => { video.srcObject = stream; })
                 .catch(err => {
-                    document.getElementById('status-text').innerText = "Erro ao acessar câmera.";
+                    document.getElementById('status-text').innerText = "Erro na Câmera";
                     document.getElementById('status-indicator').style.background = "red";
-                    console.error("Erro na câmera: " + err);
                 });
         }
 
@@ -173,6 +177,8 @@
             faceapi.matchDimensions(canvas, displaySize);
 
             setInterval(async () => {
+                if(estadoApp === "FRONTAL_TRAVADO") return; // Para de processar se travou
+
                 const detections = await faceapi.detectAllFaces(video, new faceapi.TinyFaceDetectorOptions()).withFaceLandmarks();
                 const resizedDetections = faceapi.resizeResults(detections, displaySize);
                 
@@ -222,9 +228,9 @@
             const faceHeight = Math.abs(jaw[8].y - noseBridge.y) * 1.5;
             const proporcao = faceWidth / faceHeight;
 
-            if (proporcao > 0.85) { medidas.formato = "Quadrado/Redondo"; medidas.armacao = "Retangular ou Gatinho"; }
-            else if (proporcao < 0.7) { medidas.formato = "Longo"; medidas.armacao = "Redonda/Aviador"; }
-            else { medidas.formato = "Oval"; medidas.armacao = "Qualquer Formato"; }
+            if (proporcao > 0.85) { medidas.formato = "Quadrado"; }
+            else if (proporcao < 0.7) { medidas.formato = "Longo"; }
+            else { medidas.formato = "Oval"; }
 
             atualizarPainel();
         }
@@ -249,7 +255,22 @@
             document.getElementById('val-dnp').innerText = `${medidas.dnp_od} | ${medidas.dnp_oe}`;
             document.getElementById('val-altura').innerHTML = `${Math.max(0, medidas.altura)}<small>mm</small>`;
             document.getElementById('val-formato').innerText = medidas.formato;
-            document.getElementById('val-armacao').innerText = medidas.armacao;
+        }
+
+        // --- SISTEMA DE CALIBRAÇÃO DE PRECISÃO ---
+        function calibrarEscala() {
+            // Um cartão de crédito padrão tem 85.6 mm de largura
+            const LARGURA_CARTAO_MM = 85.6; 
+            
+            // Pede para o consultor estimar quantos pixels o cartão ocupa na tela
+            // Em uma versão avançada, a IA detectaria as bordas do cartão sozinha.
+            let pixels = prompt("CALIBRAÇÃO DE PRECISÃO\n\n1. Peça ao cliente para colocar um cartão magnético no rosto.\n2. Quantos pixels de largura o cartão aparenta ter na tela? (Média em tablets: 320)\n\nDigite o valor estimado em pixels:");
+            
+            if (pixels && !isNaN(pixels)) {
+                PIXEL_TO_MM = LARGURA_CARTAO_MM / parseFloat(pixels);
+                document.getElementById('val-escala').innerText = `Ativa (${PIXEL_TO_MM.toFixed(3)})`;
+                alert("✅ Sistema calibrado para a distância atual do cliente.");
+            }
         }
 
         function travarFrontal() {
@@ -261,10 +282,7 @@
         }
 
         function iniciarPerfil() {
-            if(estadoApp === "FRONTAL") {
-                alert("Por favor, clique em 'Travar Frontal' primeiro.");
-                return;
-            }
+            if(estadoApp === "FRONTAL") return alert("Trave as medidas frontais primeiro!");
             estadoApp = "PERFIL";
             document.getElementById('modo-atual').innerText = "PASSO 2: VISÃO LATERAL";
             document.getElementById('modo-atual').style.background = "#ffaa00";
@@ -274,31 +292,18 @@
         function gravarAtendimento() {
             const cliente = document.getElementById('cliente').value;
             const filial = document.getElementById('filial').value;
-            if(!cliente || !filial) return alert("Preencha o Nome e a Filial!");
+            if(!cliente || !filial) return alert("Preencha Nome e Filial!");
             
             document.getElementById('val-panto').classList.add('value-locked');
             
-            const resumo = `
-                CLIENTE: ${cliente} | LOJA: ${filial}
-                -----------------------------------
-                DP: ${medidas.dp} mm
-                DNP (OD/OE): ${medidas.dnp_od} / ${medidas.dnp_oe} mm
-                Altura Pupila: ${medidas.altura} mm
-                Ângulo Pantoscópico: ${medidas.panto}°
-                -----------------------------------
-                Formato: ${medidas.formato}
-            `;
-            alert("✅ MEDIDAS SALVAS COM SUCESSO!\n\n" + resumo);
-            
-            setTimeout(() => location.reload(), 2000); 
+            alert(`✅ DADOS SALVOS\nCliente: ${cliente}\nDP: ${medidas.dp}mm\nAlt: ${medidas.altura}mm\nPerfil: ${medidas.panto}°`);
+            setTimeout(() => location.reload(), 1500); 
         }
 
-        // 3. INICIALIZAÇÃO SEGURA (Espera a página ler tudo antes de dar a partida)
         window.onload = function() {
             if (typeof faceapi === 'undefined') {
-                document.getElementById('status-text').innerText = "Erro: Biblioteca não encontrada.";
+                document.getElementById('status-text').innerText = "Erro Crítico: Rede bloqueada.";
                 document.getElementById('status-indicator').style.background = "red";
-                console.error("A biblioteca face-api não carregou a tempo.");
                 return;
             }
             loadModels();
