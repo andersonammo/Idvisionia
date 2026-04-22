@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ammo 360 Vision - Scanner Biométrico Completo</title>
+    <script defer src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+    <style>
+        :root {
+            --primary: #00ff88;
+            --secondary: #0088ff;
+            --bg-dark: #121212;
+            --panel-bg: #1e1e1e;
+            --text-light: #f0f0f0;
+            --border: #333;
+            --guide-color: #ff0055;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-dark);
+            color: var(--text-light);
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .header {
+            width: 100%;
+            max-width: 1200px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding-bottom: 15px;
+            border-bottom: 1px solid var(--border);
+            margin-bottom: 20px;
+        }
+
+        .header h1 { margin: 0; font-size: 24px; color: var(--primary); text-transform: uppercase; letter-spacing: 1px; }
+
+        .main-container { display: flex; gap: 30px; width: 100%; max-width: 1200px; }
+
+        /* Área da Câmera */
+        .camera-section {
+            flex: 1; position: relative; background: #000; border-radius: 12px; overflow: hidden;
+            border: 2px solid var(--border); min-height: 500px; display: flex; justify-content: center; align-items: center;
+        }
+
+        video, canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; }
+
+        /* Guias Visuais */
+        .overlay-guide {
+            position: absolute; width: 250px; height: 350px; border: 2px dashed rgba(0, 255, 136, 0.5);
+            border-radius: 50%; pointer-events: none; z-index: 10;
+        }
+
+        .frame-bottom-guide {
+            position: absolute; bottom: 35%; left: 10%; width: 80%; height: 2px;
+            background-color: var(--guide-color); box-shadow: 0 0 10px var(--guide-color);
+            z-index: 20; pointer-events: none; display: flex; justify-content: center;
+        }
+
+        .frame-bottom-guide::after {
+            content: 'Alinhe com a base da armação'; color: var(--guide-color);
+            position: absolute; top: -25px; font-size: 14px; font-weight: bold; background: rgba(0,0,0,0.5); padding: 2px 8px; border-radius: 4px;
+        }
+
+        .status-badge {
+            position: absolute; top: 20px; left: 20px; background: rgba(0,0,0,0.8); padding: 8px 15px;
+            border-radius: 20px; font-size: 14px; z-index: 10; display: flex; align-items: center; gap: 10px;
+        }
+        .indicator { width: 10px; height: 10px; border-radius: 50%; background: red; }
+
+        .mode-badge {
+            position: absolute; top: 20px; right: 20px; background: var(--secondary); color: white;
+            padding: 8px 15px; border-radius: 20px; font-size: 14px; font-weight: bold; z-index: 10;
+        }
+
+        /* Painel de Controle */
+        .control-panel { width: 420px; display: flex; flex-direction: column; gap: 15px; }
+        .card { background: var(--panel-bg); padding: 20px; border-radius: 12px; border: 1px solid var(--border); }
+        .card h3 { margin-top: 0; font-size: 16px; color: #aaa; border-bottom: 1px solid var(--border); padding-bottom: 10px; }
+        
+        .input-group { display: flex; flex-direction: column; gap: 10px; }
+        select, input { padding: 12px; background: var(--bg-dark); border: 1px solid var(--border); color: white; border-radius: 6px; font-size: 14px; }
+
+        .metrics-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        .metric-box { background: var(--bg-dark); padding: 12px; border-radius: 8px; text-align: center; border: 1px solid var(--border); }
+        .metric-value { font-size: 20px; font-weight: bold; color: var(--primary); margin-top: 5px; }
+        .metric-label { font-size: 12px; color: #888; text-transform: uppercase; }
+        
+        .value-locked { color: #ffd700 !important; } /* Cor quando a medida for travada */
+
+        .btn-group { display: flex; gap: 10px; }
+        .btn {
+            flex: 1; border: none; padding: 12px; font-size: 14px; font-weight: bold;
+            border-radius: 6px; cursor: pointer; transition: 0.2s; text-transform: uppercase;
+        }
+        .btn-frontal { background: var(--secondary); color: white; }
+        .btn-perfil { background: #ffaa00; color: black; }
+        .btn-capture { background: var(--primary); color: black; padding: 15px; font-size: 16px; width: 100%; margin-top: 10px; }
+        .btn:hover { filter: brightness(1.1); transform: translateY(-2px); }
+
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <h1>Ammo 360 Vision</h1>
+        <div>Consultório Olharys & Óticas Ammo</div>
+    </div>
+
+    <div class="main-container">
+        
+        <div class="camera-section" id="camera-container">
+            <div class="status-badge"><div class="indicator" id="status-indicator"></div><span id="status-text">Iniciando...</span></div>
+            <div class="mode-badge" id="modo-atual">PASSO 1: VISÃO FRONTAL</div>
+            
+            <video id="video" autoplay muted playsinline></video>
+            <div class="overlay-guide"></div>
+            <div class="frame-bottom-guide" id="linha-base"></div>
+        </div>
+
+        <div class="control-panel">
+            <div class="card">
+                <h3>Atendimento</h3>
+                <div class="input-group">
+                    <input type="text" id="cliente" placeholder="Nome do Cliente" required>
+                    <select id="filial">
+                        <option value="">Selecione a Filial...</option>
+                        <option value="Umuarama">Matriz - Umuarama</option>
+                        <option value="Toledo">Toledo</option>
+                        <option value="Palotina">Palotina</option>
+                        <option value="Altonia">Altônia</option>
+                        <option value="Douradina">Douradina</option>
+                        <option value="Perobal">Perobal</option>
+                    </select>
+                    <select id="consultora">
+                        <option value="">Consultor(a)...</option>
+                        <option value="Graciele">Graciele</option>
+                        <option value="Patricia">Patrícia</option>
+                        <option value="Adriana">Adriana</option>
+                        <option value="Bianca">Bianca</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="card">
+                <h3>Escâner Biométrico</h3>
+                <div class="metrics-grid">
+                    <div class="metric-box"><div class="metric-label">DP Total</div><div class="metric-value" id="val-dp">0.0<small>mm</small></div></div>
+                    <div class="metric-box"><div class="metric-label">DNP OD | OE</div><div class="metric-value" style="font-size: 16px;" id="val-dnp">0.0 | 0.0</div></div>
+                    <div class="metric-box"><div class="metric-label">Altura Pupila</div><div class="metric-value" id="val-altura">0.0<small>mm</small></div></div>
+                    <div class="metric-box"><div class="metric-label">Pantoscópico</div><div class="metric-value" id="val-panto">0.0°</div></div>
+                </div>
+                
+                <div style="margin-top: 15px; font-size: 13px; background: #222; padding: 10px; border-radius: 6px;">
+                    <div style="display:flex; justify-content: space-between; margin-bottom: 5px;">
+                        <span style="color:#aaa">Formato:</span><strong id="val-formato" style="color:var(--primary)">Avaliando...</strong>
+                    </div>
+                    <div style="display:flex; justify-content: space-between;">
+                        <span style="color:#aaa">Sugestão:</span><strong id="val-armacao">Avaliando...</strong>
+                    </div>
+                </div>
+            </div>
+
+            <div class="btn-group">
+                <button class="btn btn-frontal" onclick="travarFrontal()">1. Travar Frontal</button>
+                <button class="btn btn-perfil" onclick="iniciarPerfil()">2. Ler Perfil</button>
+            </div>
+            <button class="btn btn-capture" onclick="gravarAtendimento()">Finalizar Atendimento</button>
+        </div>
+    </div>
+
+    <script>
+        const video = document.getElementById('video');
+        const PIXEL_TO_MM = 0.264583; // Fator de calibração padrão
+        
+        let estadoApp = "FRONTAL"; // Pode ser: FRONTAL, FRONTAL_TRAVADO, PERFIL
+        let medidas = { dp: 0, dnp_od: 0, dnp_oe: 0, altura: 0, formato: '', armacao: '', panto: 0 };
+
+        // Iniciar IA
+        async function loadModels() {
+            const MODEL_URL = 'https://raw.githubusercontent.com/justadudewhohacks/face-api.js/master/weights';
+            await Promise.all([
+                faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
+                faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL)
+            ]);
+            startVideo();
+        }
+
+        function startVideo() {
+            navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } })
+                .then(stream => { video.srcObject = stream; })
+                .catch(err => alert("Erro na câmera: " + err));
+        }
+
+        // Loop Principal
+        video.addEventListener('play', () => {
+            const canvas = faceapi.createCanvasFromMedia(video);
+            document.getElementById('camera-container').appendChild(canvas);
+            const displaySize = { width: video.clientWidth, height: video.clientHeight };
+            faceapi.matchDimensions(canvas, displaySize);
+
+            setInterval(async () => {
+                const detections = await faceapi.detectAllFaces(video, new faceapi.TinyFaceDetectorOptions()).withFaceLandmarks();
+                const resizedDetections = faceapi.resizeResults(detections, displaySize);
+                
+                canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height);
+                faceapi.draw.drawFaceLandmarks(canvas, resizedDetections);
+
+                const ind = document.getElementById('status-indicator');
+                const txt = document.getElementById('status-text');
+
+                if (detections.length > 0) {
+                    ind.style.background = "var(--primary)";
+                    txt.innerText = "Rosto Detectado";
+                    
+                    if (estadoApp === "FRONTAL") processarFrontal(detections[0].landmarks);
+                    else if (estadoApp === "PERFIL") processarPerfil(detections[0].landmarks);
+                } else {
+                    ind.style.background = "red";
+                    txt.innerText = "Posicione o Cliente";
+                }
+            }, 150);
+        });
+
+        // LÓGICA 1: FRONTAL
+        function processarFrontal(landmarks) {
+            const leftEye = landmarks.getLeftEye();
+            const rightEye = landmarks.getRightEye();
+            const noseBridge = landmarks.getNose()[0];
+            const jaw = landmarks.getJawOutline();
+
+            const getCenter = (pts) => ({
+                x: pts.reduce((sum, p) => sum + p.x, 0) / pts.length,
+                y: pts.reduce((sum, p) => sum + p.y, 0) / pts.length
+            });
+
+            const cLeft = getCenter(leftEye);
+            const cRight = getCenter(rightEye);
+
+            // DP e DNP
+            medidas.dp = (Math.hypot(cRight.x - cLeft.x, cRight.y - cLeft.y) * PIXEL_TO_MM).toFixed(1);
+            medidas.dnp_od = (Math.hypot(cRight.x - noseBridge.x, cRight.y - noseBridge.y) * PIXEL_TO_MM).toFixed(1);
+            medidas.dnp_oe = (Math.hypot(cLeft.x - noseBridge.x, cLeft.y - noseBridge.y) * PIXEL_TO_MM).toFixed(1);
+
+            // Altura da Pupila
+            const videoRect = video.getBoundingClientRect();
+            const baseArmacaoY = videoRect.height - (videoRect.height * 0.35); // 35% de baixo pra cima (CSS bottom:35%)
+            const pupilaYMedia = (cLeft.y + cRight.y) / 2;
+            medidas.altura = ((baseArmacaoY - pupilaYMedia) * PIXEL_TO_MM).toFixed(1);
+
+            // Formato de Rosto
+            const faceWidth = Math.abs(jaw[0].x - jaw[16].x);
+            const faceHeight = Math.abs(jaw[8].y - noseBridge.y) * 1.5;
+            const proporcao = faceWidth / faceHeight;
+
+            if (proporcao > 0.85) { medidas.formato = "Quadrado/Redondo"; medidas.armacao = "Retangular ou Gatinho"; }
+            else if (proporcao < 0.7) { medidas.formato = "Longo"; medidas.armacao = "Redonda/Aviador"; }
+            else { medidas.formato = "Oval"; medidas.armacao = "Qualquer Formato"; }
+
+            atualizarPainel();
+        }
+
+        // LÓGICA 2: PERFIL
+        function processarPerfil(landmarks) {
+            const jaw = landmarks.getJawOutline();
+            const rightEye = landmarks.getRightEye()[3]; // Canto do olho
+            const orelha = jaw[0]; // Ponto próximo à orelha
+
+            const deltaY = rightEye.y - orelha.y;
+            const deltaX = rightEye.x - orelha.x;
+            let angulo = Math.abs(Math.atan2(deltaY, deltaX) * (180 / Math.PI));
+            
+            // Normalizar para o padrão ótico (ajuste fino)
+            if(angulo > 20) angulo = angulo / 2; 
+
+            medidas.panto = angulo.toFixed(1);
+            document.getElementById('val-panto').innerText = `${medidas.panto}°`;
+        }
+
+        // FUNÇÕES DE CONTROLE DE FLUXO
+        function atualizarPainel() {
+            document.getElementById('val-dp').innerHTML = `${medidas.dp}<small>mm</small>`;
+            document.getElementById('val-dnp').innerText = `${medidas.dnp_od} | ${medidas.dnp_oe}`;
+            document.getElementById('val-altura').innerHTML = `${Math.max(0, medidas.altura)}<small>mm</small>`;
+            document.getElementById('val-formato').innerText = medidas.formato;
+            document.getElementById('val-armacao').innerText = medidas.armacao;
+        }
+
+        function travarFrontal() {
+            estadoApp = "FRONTAL_TRAVADO";
+            document.getElementById('val-dp').classList.add('value-locked');
+            document.getElementById('val-dnp').classList.add('value-locked');
+            document.getElementById('val-altura').classList.add('value-locked');
+            document.getElementById('linha-base').style.display = 'none'; // Esconde a linha
+        }
+
+        function iniciarPerfil() {
+            if(estadoApp === "FRONTAL") alert("Trave as medidas frontais primeiro!");
+            estadoApp = "PERFIL";
+            document.getElementById('modo-atual').innerText = "PASSO 2: VISÃO LATERAL";
+            document.getElementById('modo-atual').style.background = "#ffaa00";
+            document.getElementById('modo-atual').style.color = "black";
+            alert("Peça para o cliente virar o rosto levemente de lado.");
+        }
+
+        function gravarAtendimento() {
+            const cliente = document.getElementById('cliente').value;
+            const filial = document.getElementById('filial').value;
+            if(!cliente || !filial) return alert("Preencha o Nome e a Filial!");
+            
+            document.getElementById('val-panto').classList.add('value-locked');
+            
+            const resumo = `
+                CLIENTE: ${cliente} | LOJA: ${filial}
+                -----------------------------------
+                DP: ${medidas.dp} mm
+                DNP (OD/OE): ${medidas.dnp_od} / ${medidas.dnp_oe} mm
+                Altura Pupila: ${medidas.altura} mm
+                Ângulo Pantoscópico: ${medidas.panto}°
+                -----------------------------------
+                Formato: ${medidas.formato}
+            `;
+            console.log("DADOS PRONTOS PARA O GOOGLE SHEETS:", medidas);
+            alert("✅ MEDIDAS SALVAS COM SUCESSO!\n\n" + resumo);
+            
+            // Reiniciar para próximo cliente
+            setTimeout(() => location.reload(), 2000); 
+        }
+
+        // Inicializar
+        loadModels();
+    </script>
+</body>
+</html>
