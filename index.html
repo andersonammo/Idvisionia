@@ -4,7 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Ammo 360 Vision - Scanner Biométrico Completo</title>
-    <script defer src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+    
+    <script src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api/dist/face-api.min.js"></script>
+    
     <style>
         :root {
             --primary: #00ff88;
@@ -16,93 +18,44 @@
             --guide-color: #ff0055;
         }
 
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background-color: var(--bg-dark);
-            color: var(--text-light);
-            margin: 0;
-            padding: 20px;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-        }
-
-        .header {
-            width: 100%;
-            max-width: 1200px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding-bottom: 15px;
-            border-bottom: 1px solid var(--border);
-            margin-bottom: 20px;
-        }
-
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: var(--bg-dark); color: var(--text-light); margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; }
+        .header { width: 100%; max-width: 1200px; display: flex; justify-content: space-between; align-items: center; padding-bottom: 15px; border-bottom: 1px solid var(--border); margin-bottom: 20px; }
         .header h1 { margin: 0; font-size: 24px; color: var(--primary); text-transform: uppercase; letter-spacing: 1px; }
-
         .main-container { display: flex; gap: 30px; width: 100%; max-width: 1200px; }
 
-        /* Área da Câmera */
-        .camera-section {
-            flex: 1; position: relative; background: #000; border-radius: 12px; overflow: hidden;
-            border: 2px solid var(--border); min-height: 500px; display: flex; justify-content: center; align-items: center;
-        }
-
+        /* Câmera e Guias */
+        .camera-section { flex: 1; position: relative; background: #000; border-radius: 12px; overflow: hidden; border: 2px solid var(--border); min-height: 500px; display: flex; justify-content: center; align-items: center; }
         video, canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; }
-
-        /* Guias Visuais */
-        .overlay-guide {
-            position: absolute; width: 250px; height: 350px; border: 2px dashed rgba(0, 255, 136, 0.5);
-            border-radius: 50%; pointer-events: none; z-index: 10;
-        }
-
-        .frame-bottom-guide {
-            position: absolute; bottom: 35%; left: 10%; width: 80%; height: 2px;
-            background-color: var(--guide-color); box-shadow: 0 0 10px var(--guide-color);
-            z-index: 20; pointer-events: none; display: flex; justify-content: center;
-        }
-
-        .frame-bottom-guide::after {
-            content: 'Alinhe com a base da armação'; color: var(--guide-color);
-            position: absolute; top: -25px; font-size: 14px; font-weight: bold; background: rgba(0,0,0,0.5); padding: 2px 8px; border-radius: 4px;
-        }
-
-        .status-badge {
-            position: absolute; top: 20px; left: 20px; background: rgba(0,0,0,0.8); padding: 8px 15px;
-            border-radius: 20px; font-size: 14px; z-index: 10; display: flex; align-items: center; gap: 10px;
-        }
+        .overlay-guide { position: absolute; width: 250px; height: 350px; border: 2px dashed rgba(0, 255, 136, 0.5); border-radius: 50%; pointer-events: none; z-index: 10; }
+        .frame-bottom-guide { position: absolute; bottom: 35%; left: 10%; width: 80%; height: 2px; background-color: var(--guide-color); box-shadow: 0 0 10px var(--guide-color); z-index: 20; pointer-events: none; display: flex; justify-content: center; }
+        .frame-bottom-guide::after { content: 'Alinhe com a base da armação'; color: var(--guide-color); position: absolute; top: -25px; font-size: 14px; font-weight: bold; background: rgba(0,0,0,0.8); padding: 2px 8px; border-radius: 4px; }
+        
+        /* Badges de Status */
+        .status-badge { position: absolute; top: 20px; left: 20px; background: rgba(0,0,0,0.8); padding: 8px 15px; border-radius: 20px; font-size: 14px; z-index: 10; display: flex; align-items: center; gap: 10px; }
         .indicator { width: 10px; height: 10px; border-radius: 50%; background: red; }
+        .mode-badge { position: absolute; top: 20px; right: 20px; background: var(--secondary); color: white; padding: 8px 15px; border-radius: 20px; font-size: 14px; font-weight: bold; z-index: 10; }
 
-        .mode-badge {
-            position: absolute; top: 20px; right: 20px; background: var(--secondary); color: white;
-            padding: 8px 15px; border-radius: 20px; font-size: 14px; font-weight: bold; z-index: 10;
-        }
-
-        /* Painel de Controle */
+        /* Painel */
         .control-panel { width: 420px; display: flex; flex-direction: column; gap: 15px; }
         .card { background: var(--panel-bg); padding: 20px; border-radius: 12px; border: 1px solid var(--border); }
         .card h3 { margin-top: 0; font-size: 16px; color: #aaa; border-bottom: 1px solid var(--border); padding-bottom: 10px; }
-        
         .input-group { display: flex; flex-direction: column; gap: 10px; }
         select, input { padding: 12px; background: var(--bg-dark); border: 1px solid var(--border); color: white; border-radius: 6px; font-size: 14px; }
-
+        
+        /* Medidas */
         .metrics-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
         .metric-box { background: var(--bg-dark); padding: 12px; border-radius: 8px; text-align: center; border: 1px solid var(--border); }
         .metric-value { font-size: 20px; font-weight: bold; color: var(--primary); margin-top: 5px; }
         .metric-label { font-size: 12px; color: #888; text-transform: uppercase; }
-        
-        .value-locked { color: #ffd700 !important; } /* Cor quando a medida for travada */
+        .value-locked { color: #ffd700 !important; }
 
+        /* Botões */
         .btn-group { display: flex; gap: 10px; }
-        .btn {
-            flex: 1; border: none; padding: 12px; font-size: 14px; font-weight: bold;
-            border-radius: 6px; cursor: pointer; transition: 0.2s; text-transform: uppercase;
-        }
+        .btn { flex: 1; border: none; padding: 12px; font-size: 14px; font-weight: bold; border-radius: 6px; cursor: pointer; transition: 0.2s; text-transform: uppercase; }
         .btn-frontal { background: var(--secondary); color: white; }
         .btn-perfil { background: #ffaa00; color: black; }
         .btn-capture { background: var(--primary); color: black; padding: 15px; font-size: 16px; width: 100%; margin-top: 10px; }
         .btn:hover { filter: brightness(1.1); transform: translateY(-2px); }
-
     </style>
 </head>
 <body>
@@ -115,7 +68,7 @@
     <div class="main-container">
         
         <div class="camera-section" id="camera-container">
-            <div class="status-badge"><div class="indicator" id="status-indicator"></div><span id="status-text">Iniciando...</span></div>
+            <div class="status-badge"><div class="indicator" id="status-indicator"></div><span id="status-text">Aguardando Inicialização...</span></div>
             <div class="mode-badge" id="modo-atual">PASSO 1: VISÃO FRONTAL</div>
             
             <video id="video" autoplay muted playsinline></video>
@@ -176,18 +129,18 @@
 
     <script>
         const video = document.getElementById('video');
-        const PIXEL_TO_MM = 0.264583; // Fator de calibração padrão
+        const PIXEL_TO_MM = 0.264583; 
         
-        let estadoApp = "FRONTAL"; // Pode ser: FRONTAL, FRONTAL_TRAVADO, PERFIL
+        let estadoApp = "FRONTAL"; 
         let medidas = { dp: 0, dnp_od: 0, dnp_oe: 0, altura: 0, formato: '', armacao: '', panto: 0 };
 
-        // 1. Carregar Modelos de IA (CDN ATUALIZADO E ESTÁVEL)
+        // 2. MODELOS ATUALIZADOS (Servidor Vladmandic)
         async function loadModels() {
             const txt = document.getElementById('status-text');
-            txt.innerText = "Baixando IA Ótica...";
+            const ind = document.getElementById('status-indicator');
             
-            // Servidor mais estável para os pesos neurais
-            const MODEL_URL = 'https://vladmandic.github.io/face-api/model/'; 
+            txt.innerText = "Baixando IA Ótica...";
+            const MODEL_URL = 'https://vladmandic.github.io/face-api/model/';
             
             try {
                 await Promise.all([
@@ -197,19 +150,22 @@
                 txt.innerText = "IA Pronta. Ligando Câmera...";
                 startVideo();
             } catch (erro) {
-                console.error("Erro ao carregar a IA:", erro);
-                txt.innerText = "Erro ao baixar IA. Verifique a rede.";
-                document.getElementById('status-indicator').style.background = "red";
+                console.error("Erro ao carregar IA:", erro);
+                txt.innerText = "Erro ao baixar IA. Tente recarregar a página.";
+                ind.style.background = "red";
             }
         }
 
         function startVideo() {
             navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } })
                 .then(stream => { video.srcObject = stream; })
-                .catch(err => alert("Erro na câmera: " + err));
+                .catch(err => {
+                    document.getElementById('status-text').innerText = "Erro ao acessar câmera.";
+                    document.getElementById('status-indicator').style.background = "red";
+                    console.error("Erro na câmera: " + err);
+                });
         }
 
-        // Loop Principal
         video.addEventListener('play', () => {
             const canvas = faceapi.createCanvasFromMedia(video);
             document.getElementById('camera-container').appendChild(canvas);
@@ -239,7 +195,6 @@
             }, 150);
         });
 
-        // LÓGICA 1: FRONTAL
         function processarFrontal(landmarks) {
             const leftEye = landmarks.getLeftEye();
             const rightEye = landmarks.getRightEye();
@@ -254,18 +209,15 @@
             const cLeft = getCenter(leftEye);
             const cRight = getCenter(rightEye);
 
-            // DP e DNP
             medidas.dp = (Math.hypot(cRight.x - cLeft.x, cRight.y - cLeft.y) * PIXEL_TO_MM).toFixed(1);
             medidas.dnp_od = (Math.hypot(cRight.x - noseBridge.x, cRight.y - noseBridge.y) * PIXEL_TO_MM).toFixed(1);
             medidas.dnp_oe = (Math.hypot(cLeft.x - noseBridge.x, cLeft.y - noseBridge.y) * PIXEL_TO_MM).toFixed(1);
 
-            // Altura da Pupila
             const videoRect = video.getBoundingClientRect();
-            const baseArmacaoY = videoRect.height - (videoRect.height * 0.35); // 35% de baixo pra cima (CSS bottom:35%)
+            const baseArmacaoY = videoRect.height - (videoRect.height * 0.35); 
             const pupilaYMedia = (cLeft.y + cRight.y) / 2;
             medidas.altura = ((baseArmacaoY - pupilaYMedia) * PIXEL_TO_MM).toFixed(1);
 
-            // Formato de Rosto
             const faceWidth = Math.abs(jaw[0].x - jaw[16].x);
             const faceHeight = Math.abs(jaw[8].y - noseBridge.y) * 1.5;
             const proporcao = faceWidth / faceHeight;
@@ -277,24 +229,21 @@
             atualizarPainel();
         }
 
-        // LÓGICA 2: PERFIL
         function processarPerfil(landmarks) {
             const jaw = landmarks.getJawOutline();
-            const rightEye = landmarks.getRightEye()[3]; // Canto do olho
-            const orelha = jaw[0]; // Ponto próximo à orelha
+            const rightEye = landmarks.getRightEye()[3];
+            const orelha = jaw[0]; 
 
             const deltaY = rightEye.y - orelha.y;
             const deltaX = rightEye.x - orelha.x;
             let angulo = Math.abs(Math.atan2(deltaY, deltaX) * (180 / Math.PI));
             
-            // Normalizar para o padrão ótico (ajuste fino)
             if(angulo > 20) angulo = angulo / 2; 
 
             medidas.panto = angulo.toFixed(1);
             document.getElementById('val-panto').innerText = `${medidas.panto}°`;
         }
 
-        // FUNÇÕES DE CONTROLE DE FLUXO
         function atualizarPainel() {
             document.getElementById('val-dp').innerHTML = `${medidas.dp}<small>mm</small>`;
             document.getElementById('val-dnp').innerText = `${medidas.dnp_od} | ${medidas.dnp_oe}`;
@@ -308,16 +257,18 @@
             document.getElementById('val-dp').classList.add('value-locked');
             document.getElementById('val-dnp').classList.add('value-locked');
             document.getElementById('val-altura').classList.add('value-locked');
-            document.getElementById('linha-base').style.display = 'none'; // Esconde a linha
+            document.getElementById('linha-base').style.display = 'none'; 
         }
 
         function iniciarPerfil() {
-            if(estadoApp === "FRONTAL") alert("Trave as medidas frontais primeiro!");
+            if(estadoApp === "FRONTAL") {
+                alert("Por favor, clique em 'Travar Frontal' primeiro.");
+                return;
+            }
             estadoApp = "PERFIL";
             document.getElementById('modo-atual').innerText = "PASSO 2: VISÃO LATERAL";
             document.getElementById('modo-atual').style.background = "#ffaa00";
             document.getElementById('modo-atual').style.color = "black";
-            alert("Peça para o cliente virar o rosto levemente de lado.");
         }
 
         function gravarAtendimento() {
@@ -337,15 +288,21 @@
                 -----------------------------------
                 Formato: ${medidas.formato}
             `;
-            console.log("DADOS PRONTOS PARA O GOOGLE SHEETS:", medidas);
             alert("✅ MEDIDAS SALVAS COM SUCESSO!\n\n" + resumo);
             
-            // Reiniciar para próximo cliente
             setTimeout(() => location.reload(), 2000); 
         }
 
-        // Inicializar
-        loadModels();
+        // 3. INICIALIZAÇÃO SEGURA (Espera a página ler tudo antes de dar a partida)
+        window.onload = function() {
+            if (typeof faceapi === 'undefined') {
+                document.getElementById('status-text').innerText = "Erro: Biblioteca não encontrada.";
+                document.getElementById('status-indicator').style.background = "red";
+                console.error("A biblioteca face-api não carregou a tempo.");
+                return;
+            }
+            loadModels();
+        };
     </script>
 </body>
 </html>
