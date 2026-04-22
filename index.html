@@ -131,183 +131,191 @@
         </div>
     </div>
 
-    <script>
-        const video = document.getElementById('video');
+   <script>
+    const video = document.getElementById('video');
+    const container = document.getElementById('camera-container');
+    
+    let PIXEL_TO_MM = 0.264583; 
+    let estadoApp = "FRONTAL"; 
+    let medidas = { dp: 0, dnp_od: 0, dnp_oe: 0, altura: 0, formato: '', panto: 0 };
+
+    // Variáveis para a nova calibração por clique
+    let pontosCalibracao = [];
+    let calibrando = false;
+    let telaCongelada = false;
+
+    async function loadModels() {
+        const txt = document.getElementById('status-text');
+        const ind = document.getElementById('status-indicator');
         
-        // Agora o fator é uma variável (let) para poder ser alterada pelo botão de calibração
-        let PIXEL_TO_MM = 0.264583; 
+        txt.innerText = "Baixando IA Ótica...";
+        const MODEL_URL = 'https://vladmandic.github.io/face-api/model/';
         
-        let estadoApp = "FRONTAL"; 
-        let medidas = { dp: 0, dnp_od: 0, dnp_oe: 0, altura: 0, formato: '', panto: 0 };
-
-        async function loadModels() {
-            const txt = document.getElementById('status-text');
-            const ind = document.getElementById('status-indicator');
-            
-            txt.innerText = "Baixando IA Ótica...";
-            const MODEL_URL = 'https://vladmandic.github.io/face-api/model/';
-            
-            try {
-                await Promise.all([
-                    faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
-                    faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL)
-                ]);
-                txt.innerText = "IA Pronta. Ligando Câmera...";
-                startVideo();
-            } catch (erro) {
-                console.error("Erro ao carregar IA:", erro);
-                txt.innerText = "Erro ao baixar IA. Recarregue a página.";
-                ind.style.background = "red";
-            }
+        try {
+            await Promise.all([
+                faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
+                faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL)
+            ]);
+            txt.innerText = "IA Pronta. Ligando Câmera...";
+            startVideo();
+        } catch (erro) {
+            console.error("Erro:", erro);
+            txt.innerText = "Erro ao baixar IA.";
+            ind.style.background = "red";
         }
+    }
 
-        function startVideo() {
-            navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } })
-                .then(stream => { video.srcObject = stream; })
-                .catch(err => {
-                    document.getElementById('status-text').innerText = "Erro na Câmera";
-                    document.getElementById('status-indicator').style.background = "red";
-                });
-        }
+    function startVideo() {
+        navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } })
+            .then(stream => { video.srcObject = stream; })
+            .catch(err => { document.getElementById('status-indicator').style.background = "red"; });
+    }
 
-        video.addEventListener('play', () => {
-            const canvas = faceapi.createCanvasFromMedia(video);
-            document.getElementById('camera-container').appendChild(canvas);
-            const displaySize = { width: video.clientWidth, height: video.clientHeight };
-            faceapi.matchDimensions(canvas, displaySize);
+    // O Canvas agora precisa estar acessível globalmente para registrarmos os cliques
+    let canvasMaster;
 
-            setInterval(async () => {
-                if(estadoApp === "FRONTAL_TRAVADO") return; // Para de processar se travou
+    video.addEventListener('play', () => {
+        canvasMaster = faceapi.createCanvasFromMedia(video);
+        canvasMaster.style.cursor = "crosshair"; // Muda o mouse para uma mira
+        container.appendChild(canvasMaster);
+        const displaySize = { width: video.clientWidth, height: video.clientHeight };
+        faceapi.matchDimensions(canvasMaster, displaySize);
 
-                const detections = await faceapi.detectAllFaces(video, new faceapi.TinyFaceDetectorOptions()).withFaceLandmarks();
-                const resizedDetections = faceapi.resizeResults(detections, displaySize);
+        // Evento de Clique para Calibração Visual
+        canvasMaster.addEventListener('click', (e) => {
+            if (!calibrando) return;
+
+            // Pega a posição do clique relativa ao canvas
+            const rect = canvasMaster.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+
+            pontosCalibracao.push({x, y});
+
+            // Desenha um ponto vermelho onde a consultora clicou
+            const ctx = canvasMaster.getContext('2d');
+            ctx.fillStyle = "red";
+            ctx.beginPath();
+            ctx.arc(x, y, 4, 0, 2 * Math.PI);
+            ctx.fill();
+
+            if (pontosCalibracao.length === 2) {
+                // Dois cliques feitos! Calcula a distância em pixels
+                const distPixels = Math.hypot(
+                    pontosCalibracao[1].x - pontosCalibracao[0].x, 
+                    pontosCalibracao[1].y - pontosCalibracao[0].y
+                );
                 
-                canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height);
-                faceapi.draw.drawFaceLandmarks(canvas, resizedDetections);
-
-                const ind = document.getElementById('status-indicator');
-                const txt = document.getElementById('status-text');
-
-                if (detections.length > 0) {
-                    ind.style.background = "var(--primary)";
-                    txt.innerText = "Rosto Detectado";
-                    
-                    if (estadoApp === "FRONTAL") processarFrontal(detections[0].landmarks);
-                    else if (estadoApp === "PERFIL") processarPerfil(detections[0].landmarks);
-                } else {
-                    ind.style.background = "red";
-                    txt.innerText = "Posicione o Cliente";
-                }
-            }, 150);
+                // Cartão padrão = 85.6mm
+                PIXEL_TO_MM = 85.6 / distPixels;
+                
+                document.getElementById('val-escala').innerText = `Exata (${PIXEL_TO_MM.toFixed(3)})`;
+                alert("✅ Calibração de Precisão Concluída!\nA escala foi ajustada perfeitamente para a distância deste cliente.");
+                
+                // Retoma o vídeo e o reconhecimento
+                calibrando = false;
+                telaCongelada = false;
+                video.play();
+                pontosCalibracao = [];
+            }
         });
 
-        function processarFrontal(landmarks) {
-            const leftEye = landmarks.getLeftEye();
-            const rightEye = landmarks.getRightEye();
-            const noseBridge = landmarks.getNose()[0];
-            const jaw = landmarks.getJawOutline();
+        setInterval(async () => {
+            if(estadoApp === "FRONTAL_TRAVADO" || telaCongelada) return;
 
-            const getCenter = (pts) => ({
-                x: pts.reduce((sum, p) => sum + p.x, 0) / pts.length,
-                y: pts.reduce((sum, p) => sum + p.y, 0) / pts.length
-            });
-
-            const cLeft = getCenter(leftEye);
-            const cRight = getCenter(rightEye);
-
-            medidas.dp = (Math.hypot(cRight.x - cLeft.x, cRight.y - cLeft.y) * PIXEL_TO_MM).toFixed(1);
-            medidas.dnp_od = (Math.hypot(cRight.x - noseBridge.x, cRight.y - noseBridge.y) * PIXEL_TO_MM).toFixed(1);
-            medidas.dnp_oe = (Math.hypot(cLeft.x - noseBridge.x, cLeft.y - noseBridge.y) * PIXEL_TO_MM).toFixed(1);
-
-            const videoRect = video.getBoundingClientRect();
-            const baseArmacaoY = videoRect.height - (videoRect.height * 0.35); 
-            const pupilaYMedia = (cLeft.y + cRight.y) / 2;
-            medidas.altura = ((baseArmacaoY - pupilaYMedia) * PIXEL_TO_MM).toFixed(1);
-
-            const faceWidth = Math.abs(jaw[0].x - jaw[16].x);
-            const faceHeight = Math.abs(jaw[8].y - noseBridge.y) * 1.5;
-            const proporcao = faceWidth / faceHeight;
-
-            if (proporcao > 0.85) { medidas.formato = "Quadrado"; }
-            else if (proporcao < 0.7) { medidas.formato = "Longo"; }
-            else { medidas.formato = "Oval"; }
-
-            atualizarPainel();
-        }
-
-        function processarPerfil(landmarks) {
-            const jaw = landmarks.getJawOutline();
-            const rightEye = landmarks.getRightEye()[3];
-            const orelha = jaw[0]; 
-
-            const deltaY = rightEye.y - orelha.y;
-            const deltaX = rightEye.x - orelha.x;
-            let angulo = Math.abs(Math.atan2(deltaY, deltaX) * (180 / Math.PI));
+            const detections = await faceapi.detectAllFaces(video, new faceapi.TinyFaceDetectorOptions()).withFaceLandmarks();
+            const resizedDetections = faceapi.resizeResults(detections, displaySize);
             
-            if(angulo > 20) angulo = angulo / 2; 
+            const ctx = canvasMaster.getContext('2d');
+            ctx.clearRect(0, 0, canvasMaster.width, canvasMaster.height);
+            faceapi.draw.drawFaceLandmarks(canvasMaster, resizedDetections);
 
-            medidas.panto = angulo.toFixed(1);
-            document.getElementById('val-panto').innerText = `${medidas.panto}°`;
-        }
-
-        function atualizarPainel() {
-            document.getElementById('val-dp').innerHTML = `${medidas.dp}<small>mm</small>`;
-            document.getElementById('val-dnp').innerText = `${medidas.dnp_od} | ${medidas.dnp_oe}`;
-            document.getElementById('val-altura').innerHTML = `${Math.max(0, medidas.altura)}<small>mm</small>`;
-            document.getElementById('val-formato').innerText = medidas.formato;
-        }
-
-        // --- SISTEMA DE CALIBRAÇÃO DE PRECISÃO ---
-        function calibrarEscala() {
-            // Um cartão de crédito padrão tem 85.6 mm de largura
-            const LARGURA_CARTAO_MM = 85.6; 
-            
-            // Pede para o consultor estimar quantos pixels o cartão ocupa na tela
-            // Em uma versão avançada, a IA detectaria as bordas do cartão sozinha.
-            let pixels = prompt("CALIBRAÇÃO DE PRECISÃO\n\n1. Peça ao cliente para colocar um cartão magnético no rosto.\n2. Quantos pixels de largura o cartão aparenta ter na tela? (Média em tablets: 320)\n\nDigite o valor estimado em pixels:");
-            
-            if (pixels && !isNaN(pixels)) {
-                PIXEL_TO_MM = LARGURA_CARTAO_MM / parseFloat(pixels);
-                document.getElementById('val-escala').innerText = `Ativa (${PIXEL_TO_MM.toFixed(3)})`;
-                alert("✅ Sistema calibrado para a distância atual do cliente.");
+            if (detections.length > 0) {
+                document.getElementById('status-indicator').style.background = "var(--primary)";
+                document.getElementById('status-text').innerText = "Rosto Detectado";
+                if (estadoApp === "FRONTAL") processarFrontal(detections[0].landmarks);
+                else if (estadoApp === "PERFIL") processarPerfil(detections[0].landmarks);
             }
-        }
+        }, 150);
+    });
 
-        function travarFrontal() {
-            estadoApp = "FRONTAL_TRAVADO";
-            document.getElementById('val-dp').classList.add('value-locked');
-            document.getElementById('val-dnp').classList.add('value-locked');
-            document.getElementById('val-altura').classList.add('value-locked');
-            document.getElementById('linha-base').style.display = 'none'; 
-        }
+    function processarFrontal(landmarks) {
+        const leftEye = landmarks.getLeftEye();
+        const rightEye = landmarks.getRightEye();
+        const noseBridge = landmarks.getNose()[0];
+        
+        const getCenter = (pts) => ({
+            x: pts.reduce((sum, p) => sum + p.x, 0) / pts.length,
+            y: pts.reduce((sum, p) => sum + p.y, 0) / pts.length
+        });
 
-        function iniciarPerfil() {
-            if(estadoApp === "FRONTAL") return alert("Trave as medidas frontais primeiro!");
-            estadoApp = "PERFIL";
-            document.getElementById('modo-atual').innerText = "PASSO 2: VISÃO LATERAL";
-            document.getElementById('modo-atual').style.background = "#ffaa00";
-            document.getElementById('modo-atual').style.color = "black";
-        }
+        const cLeft = getCenter(leftEye);
+        const cRight = getCenter(rightEye);
 
-        function gravarAtendimento() {
-            const cliente = document.getElementById('cliente').value;
-            const filial = document.getElementById('filial').value;
-            if(!cliente || !filial) return alert("Preencha Nome e Filial!");
-            
-            document.getElementById('val-panto').classList.add('value-locked');
-            
-            alert(`✅ DADOS SALVOS\nCliente: ${cliente}\nDP: ${medidas.dp}mm\nAlt: ${medidas.altura}mm\nPerfil: ${medidas.panto}°`);
-            setTimeout(() => location.reload(), 1500); 
-        }
+        // Aplica o fator de calibração exato
+        medidas.dp = (Math.hypot(cRight.x - cLeft.x, cRight.y - cLeft.y) * PIXEL_TO_MM).toFixed(1);
+        medidas.dnp_od = (Math.hypot(cRight.x - noseBridge.x, cRight.y - noseBridge.y) * PIXEL_TO_MM).toFixed(1);
+        medidas.dnp_oe = (Math.hypot(cLeft.x - noseBridge.x, cLeft.y - noseBridge.y) * PIXEL_TO_MM).toFixed(1);
 
-        window.onload = function() {
-            if (typeof faceapi === 'undefined') {
-                document.getElementById('status-text').innerText = "Erro Crítico: Rede bloqueada.";
-                document.getElementById('status-indicator').style.background = "red";
-                return;
-            }
-            loadModels();
-        };
-    </script>
+        const videoRect = video.getBoundingClientRect();
+        const baseArmacaoY = videoRect.height - (videoRect.height * 0.35); 
+        const pupilaYMedia = (cLeft.y + cRight.y) / 2;
+        medidas.altura = ((baseArmacaoY - pupilaYMedia) * PIXEL_TO_MM).toFixed(1);
+
+        atualizarPainel();
+    }
+
+    function processarPerfil(landmarks) {
+        const jaw = landmarks.getJawOutline();
+        const rightEye = landmarks.getRightEye()[3];
+        const orelha = jaw[0]; 
+
+        const deltaY = rightEye.y - orelha.y;
+        const deltaX = rightEye.x - orelha.x;
+        let angulo = Math.abs(Math.atan2(deltaY, deltaX) * (180 / Math.PI));
+        
+        if(angulo > 20) angulo = angulo / 2; 
+
+        medidas.panto = angulo.toFixed(1);
+        document.getElementById('val-panto').innerText = `${medidas.panto}°`;
+    }
+
+    function atualizarPainel() {
+        document.getElementById('val-dp').innerHTML = `${medidas.dp}<small>mm</small>`;
+        document.getElementById('val-dnp').innerText = `${medidas.dnp_od} | ${medidas.dnp_oe}`;
+        document.getElementById('val-altura').innerHTML = `${Math.max(0, medidas.altura)}<small>mm</small>`;
+    }
+
+    // --- NOVO SISTEMA DE CALIBRAÇÃO VISUAL ---
+    function calibrarEscala() {
+        alert("MODO DE CALIBRAÇÃO:\n\n1. A imagem vai congelar.\n2. Clique exatamente na borda ESQUERDA do cartão do cliente.\n3. Em seguida, clique na borda DIREITA do cartão.");
+        
+        telaCongelada = true;
+        calibrando = true;
+        video.pause(); // Congela o vídeo para a consultora conseguir clicar nas bordas com calma
+        pontosCalibracao = [];
+    }
+
+    function travarFrontal() {
+        estadoApp = "FRONTAL_TRAVADO";
+        document.getElementById('val-dp').classList.add('value-locked');
+        document.getElementById('val-dnp').classList.add('value-locked');
+    }
+
+    function iniciarPerfil() {
+        estadoApp = "PERFIL";
+        document.getElementById('modo-atual').innerText = "PASSO 2: VISÃO LATERAL";
+        document.getElementById('modo-atual').style.background = "#ffaa00";
+    }
+
+    function gravarAtendimento() {
+        alert("Medidas prontas para o laboratório.");
+        setTimeout(() => location.reload(), 1500); 
+    }
+
+    window.onload = function() {
+        if (typeof faceapi !== 'undefined') loadModels();
+    };
+</script>
 </body>
 </html>
